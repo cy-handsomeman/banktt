@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>银行管理系统</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; min-height: 100vh; }
+        
+        /* 容器 */
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+        
+        /* 左侧导航栏 */
+        .sidebar {
+            width: 240px;
+            background: linear-gradient(180deg, #1a3a5c, #2c5a87);
+            box-shadow: 4px 0 12px rgba(0,0,0,0.05);
+            position: fixed;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 100;
+            overflow-y: auto;
+        }
+        
+        .sidebar-brand {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            color: white;
+            font-size: 1.2rem;
+            font-weight: 600;
+            padding: 20px 24px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            margin-bottom: 16px;
+        }
+        
+        .sidebar-brand i {
+            margin-right: 10px;
+            font-size: 1.4rem;
+            position: absolute;
+            left: 24px;
+            top: 20px;
+        }
+        
+        .sidebar-brand span {
+            padding-left: 34px;
+        }
+        
+        .nav-links {
+            padding: 0 12px;
+        }
+        
+        .nav-item {
+            display: flex;
+            align-items: center;
+            padding: 14px 18px;
+            color: rgba(255,255,255,0.85);
+            text-decoration: none;
+            font-size: 0.95rem;
+            font-weight: 500;
+            border-radius: 10px;
+            transition: all 0.2s;
+            cursor: pointer;
+            margin-bottom: 4px;
+        }
+        
+        .nav-item:hover {
+            background: rgba(255,255,255,0.15);
+            color: white;
+        }
+        
+        .nav-item.active {
+            background: rgba(255,255,255,0.2);
+            color: white;
+            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .nav-item i {
+            margin-right: 12px;
+            font-size: 1.05rem;
+            width: 20px;
+            text-align: center;
+        }
+        
+        /* 分组标题 */
+        .nav-group-title {
+            padding: 12px 18px 8px;
+            color: rgba(255,255,255,0.5);
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            display: flex;
+            align-items: center;
+            transition: color 0.2s;
+        }
+        
+        .nav-group-title:hover {
+            color: rgba(255,255,255,0.8);
+        }
+        
+        .nav-group-title::after {
+            content: '▼';
+            font-size: 0.5rem;
+            position: absolute;
+            right: 18px;
+            transition: transform 0.2s;
+        }
+        
+        .nav-group-title.collapsed::after {
+            transform: rotate(-90deg);
+        }
+        
+        /* 分组内容 */
+        .nav-group-content {
+            overflow: hidden;
+            transition: max-height 0.25s ease-out;
+        }
+        
+        .nav-group-content.collapsed {
+            max-height: 0;
+        }
+        
+        .nav-group-content.expanded {
+            max-height: 200px;
+        }
+        
+        .nav-group-content.locked {
+            pointer-events: none;
+        }
+        
+        /* 锁定状态的分组标题 */
+        .nav-group-title.locked {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+        
+        .nav-group-title.locked:hover {
+            color: rgba(255,255,255,0.5);
+        }
+        
+        /* 主内容区域 */
+        .main-content {
+            flex: 1;
+            margin-left: 240px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* 顶部导航栏 */
+        .top-bar {
+            height: 56px;
+            background: white;
+            border-bottom: 1px solid #e5e7eb;
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            padding: 0 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+
+        /* 用户下拉菜单 */
+        .user-dropdown {
+            position: relative;
+            display: inline-block;
+            cursor: pointer;
+        }
+
+        .user-btn {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 12px;
+            border-radius: 20px;
+            background: #f3f4f6;
+            transition: all 0.2s;
+            border: none;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: #374151;
+        }
+
+        .user-btn:hover {
+            background: #e5e7eb;
+        }
+
+        .user-btn img {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            object-fit: cover;
+            background: linear-gradient(135deg, #1a3a5c, #2c5a87);
+        }
+
+        .user-btn i {
+            font-size: 0.8rem;
+            color: #6b7280;
+            transition: transform 0.2s ease;
+        }
+
+        .user-btn i.rotated {
+            transform: rotate(90deg);
+        }
+
+        .user-dropdown-content {
+            display: none;
+            position: absolute;
+            right: 0;
+            top: 100%;
+            background: white;
+            min-width: 200px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            border-radius: 12px;
+            padding: 8px 0;
+            z-index: 1000;
+            border: 1px solid #e5e7eb;
+            margin-top: 8px;
+        }
+
+        .user-dropdown-content.show {
+            display: block;
+        }
+
+        .user-dropdown-content::before {
+            display: none;
+        }
+
+        .dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 10px 16px;
+            color: #374151;
+            text-decoration: none;
+            transition: background 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .dropdown-item:hover {
+            background: #f3f4f6;
+        }
+
+        .dropdown-item i {
+            width: 18px;
+            font-size: 0.95rem;
+            color: #6b7280;
+        }
+
+        .dropdown-divider {
+            height: 1px;
+            background: #e5e7eb;
+            margin: 8px 0;
+        }
+
+        .dropdown-header {
+            padding: 12px 16px;
+            background: #f9fafb;
+            border-bottom: 1px solid #e5e7eb;
+            margin-bottom: 8px;
+        }
+
+        .dropdown-header .role-label {
+            font-size: 0.8rem;
+            color: #6b7280;
+            margin-bottom: 4px;
+        }
+
+        .dropdown-header .role-value {
+            font-size: 0.95rem;
+            font-weight: 600;
+            color: #1f2937;
+        }
+
+        .dropdown-header .user-name {
+            font-size: 0.85rem;
+            color: #9ca3af;
+            margin-top: 4px;
+        }
+
+        .logout-btn {
+            color: #dc2626;
+        }
+
+        .logout-btn:hover {
+            background: #fef2f2;
+        }
+        
+        /* iframe容器 */
+        .iframe-container {
+            flex: 1;
+            width: 100%;
+            border: none;
+            background: #fafbfc;
+        }
+        
+        /* 加载中提示 */
+        .loading-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(26, 58, 92, 0.9);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .loading-overlay .spinner {
+            width: 50px;
+            height: 50px;
+            border: 4px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .loading-overlay .loading-text {
+            color: white;
+            margin-top: 20px;
+            font-size: 1rem;
+        }
+        
+        /* 无权限提示 */
+        .no-permission {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #6b7280;
+        }
+        
+        .no-permission i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            opacity: 0.5;
+        }
+        
+        .no-permission h2 {
+            font-size: 1.5rem;
+            margin-bottom: 10px;
+        }
+        
+        .no-permission p {
+            font-size: 0.9rem;
+            color: #9ca3af;
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 900px) {
+            .sidebar {
+                width: 70px;
+            }
+            
+            .sidebar-brand span {
+                display: none;
+            }
+            
+            .nav-item span {
+                display: none;
+            }
+            
+            .nav-item i {
+                margin-right: 0;
+            }
+            
+            .main-content {
+                margin-left: 70px;
+            }
+        }
+        
+    </style>
+</head>
+<body>
+    <!-- 加载中遮罩 -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <div class="loading-text">加载中...</div>
+    </div>
+    
+    <div class="container">
+        <!-- 左侧导航栏 -->
+        <aside class="sidebar">
+            <div class="sidebar-brand">
+                <i class="fas fa-university"></i>
+                <span>银行管理系统</span>
+            </div>
+            <div class="nav-links" id="navLinks">
+                <!-- 菜单将通过JavaScript动态渲染 -->
+            </div>
+        </aside>
+
+        <!-- 主内容区域 -->
+        <main class="main-content">
+            <!-- 顶部导航栏 -->
+            <header class="top-bar">
+                <div class="user-dropdown">
+                    <button class="user-btn" onclick="toggleUserDropdown(); event.stopPropagation();">
+                        <img src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2'%3E%3C/path%3E%3Ccircle cx='12' cy='7' r='4'%3E%3C/circle%3E%3C/svg%3E" alt="用户头像">
+                        <span id="currentUserName">未登录</span>
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                    <div class="user-dropdown-content">
+                        <div class="dropdown-header">
+                            <div class="role-label">当前角色</div>
+                            <div class="role-value" id="dropdownRoleText">无角色</div>
+                            <div class="user-name" id="dropdownUserName">-</div>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-item" onclick="goToSettings()">
+                            <i class="fas fa-cog"></i>
+                            <span>系统设置</span>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <div class="dropdown-item logout-btn" onclick="logout()">
+                            <i class="fas fa-sign-out-alt"></i>
+                            <span>退出登录</span>
+                        </div>
+                    </div>
+                </div>
+            </header>
+            <iframe id="contentIframe" class="iframe-container" src="" frameborder="0"></iframe>
+        </main>
+    </div>
+
+    <script>
+        // 用户下拉菜单控制
+        function toggleUserDropdown() {
+            const dropdown = $('.user-dropdown-content');
+            const arrow = $('.user-btn i');
+            if (dropdown.hasClass('show')) {
+                dropdown.stop(true, true).fadeOut(150).removeClass('show');
+                arrow.removeClass('rotated');
+            } else {
+                dropdown.stop(true, true).fadeIn(150).addClass('show');
+                arrow.addClass('rotated');
+            }
+        }
+
+        function hideUserDropdown() {
+            $('.user-dropdown-content').stop(true, true).fadeOut(150).removeClass('show');
+            $('.user-btn i').removeClass('rotated');
+        }
+
+        // 用户权限信息
+        let userPermissions = {
+            roles: [],
+            role_names_str: '无角色',
+            is_super_admin: false,
+            menu: []
+        };
+
+        // 更新角色显示（仅更新下拉菜单中的角色）
+        function updateRoleDisplay(roleText) {
+            $('#dropdownRoleText').text(roleText);
+        }
+
+        // 更新用户名显示
+        function updateUserNameDisplay(userName) {
+            $('#currentUserName').text(userName || '未登录');
+            $('#dropdownUserName').text(userName || '-');
+        }
+
+        // 从sessionStorage获取当前用户ID
+        function getCurrentUserId() {
+            const userId = sessionStorage.getItem('user_id');
+            return userId ? parseInt(userId) : null;
+        }
+
+        // 获取用户菜单
+        function loadUserMenu() {
+            const userId = getCurrentUserId();
+            
+            // 如果没有登录用户ID，显示默认菜单
+            if (!userId) {
+                console.log('未获取到用户ID，显示默认菜单');
+                updateRoleDisplay('无角色');
+                renderDefaultMenu();
+                return Promise.resolve();
+            }
+            
+            return $.ajax({
+                url: '/api/get_user_menu/',
+                method: 'GET',
+                data: { user_id: userId }
+            }).then(response => {
+                userPermissions = {
+                    roles: response.user_roles || [],
+                    role_names_str: response.role_names_str || '无角色',
+                    is_super_admin: response.is_super_admin || false,
+                    menu: response.menu || []
+                };
+                updateRoleDisplay(userPermissions.role_names_str);
+                renderMenu();
+            }).catch(err => {
+                console.error('获取用户菜单失败:', err);
+                updateRoleDisplay('无角色');
+                renderDefaultMenu();
+            });
+        }
+
+        // 渲染菜单
+        function renderMenu() {
+            const container = $('#navLinks');
+            let html = '';
+            
+            // 如果菜单为空，显示默认菜单
+            if (!userPermissions.menu || userPermissions.menu.length === 0) {
+                renderDefaultMenu();
+                return;
+            }
+            
+            userPermissions.menu.forEach((group, groupIndex) => {
+                const isLocked = group.locked || false;
+                html += `
+                    <div class="nav-group">
+                        <div class="nav-group-title ${isLocked ? 'locked' : ''}" data-group-index="${groupIndex}" data-locked="${isLocked}">
+                            ${group.group}${isLocked ? ' <i class="fas fa-lock" style="font-size: 0.7rem; margin-left: 4px;"></i>' : ''}
+                        </div>
+                        <div class="nav-group-content ${isLocked ? 'collapsed locked' : 'expanded'}">
+                `;
+                group.items.forEach(item => {
+                    html += `
+                        <div class="nav-item" data-target="${item.key}" data-url="${item.url}">
+                            <i class="${item.icon}"></i>
+                            <span>${item.title}</span>
+                        </div>
+                    `;
+                });
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.html(html);
+            
+            // 绑定分组标题点击事件（展开/收缩）
+            $('.nav-group-title').on('click', function() {
+                const isLocked = $(this).data('locked');
+                if (isLocked) {
+                    showToast('您没有权限访问此功能', 2000);
+                    return;
+                }
+                
+                const content = $(this).next('.nav-group-content');
+                
+                // 切换状态
+                if (content.hasClass('expanded')) {
+                    content.removeClass('expanded').addClass('collapsed');
+                    $(this).addClass('collapsed');
+                } else {
+                    content.removeClass('collapsed').addClass('expanded');
+                    $(this).removeClass('collapsed');
+                }
+            });
+            
+            // 绑定菜单项点击事件
+            $('.nav-item').on('click', function() {
+                const url = $(this).data('url');
+                loadPage(url, $(this));
+            });
+            
+            // 默认加载第一个有权限的页面
+            const firstItem = userPermissions.menu[0]?.items[0];
+            if (firstItem) {
+                loadPage(firstItem.url, $('.nav-item').first());
+            }
+        }
+
+        // 渲染默认菜单（当获取用户菜单失败时使用）
+        function renderDefaultMenu() {
+            const container = $('#navLinks');
+            const defaultMenu = [
+                {
+                    group: '业务管理',
+                    items: [
+                        { key: 'user_info', title: '客户管理', icon: 'fas fa-users', url: '/user/' },
+                        { key: 'card_info', title: '银行卡管理', icon: 'fas fa-credit-card', url: '/card/' },
+                        { key: 'trade_info', title: '交易管理', icon: 'fas fa-exchange-alt', url: '/trade/' }
+                    ],
+                    locked: false
+                },
+                {
+                    group: '权限管理',
+                    items: [
+                        { key: 'sys_user', title: '系统用户', icon: 'fas fa-user-circle', url: '/sys_user/' },
+                        { key: 'sys_role', title: '角色管理', icon: 'fas fa-shield-alt', url: '/role/' },
+                        { key: 'sys_user_role', title: '用户角色分配', icon: 'fas fa-user-shield', url: '/user_role/' }
+                    ],
+                    locked: false
+                }
+            ];
+            
+            let html = '';
+            defaultMenu.forEach((group, groupIndex) => {
+                html += `
+                    <div class="nav-group">
+                        <div class="nav-group-title" data-group-index="${groupIndex}" data-locked="false">${group.group}</div>
+                        <div class="nav-group-content expanded">
+                `;
+                group.items.forEach(item => {
+                    html += `
+                        <div class="nav-item" data-target="${item.key}" data-url="${item.url}">
+                            <i class="${item.icon}"></i>
+                            <span>${item.title}</span>
+                        </div>
+                    `;
+                });
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+            
+            container.html(html);
+            
+            // 绑定分组标题点击事件
+            $('.nav-group-title').on('click', function() {
+                const content = $(this).next('.nav-group-content');
+                if (content.hasClass('expanded')) {
+                    content.removeClass('expanded').addClass('collapsed');
+                    $(this).addClass('collapsed');
+                } else {
+                    content.removeClass('collapsed').addClass('expanded');
+                    $(this).removeClass('collapsed');
+                }
+            });
+            
+            // 绑定菜单项点击事件
+            $('.nav-item').on('click', function() {
+                const url = $(this).data('url');
+                loadPage(url, $(this));
+            });
+            
+            // 默认加载第一个页面
+            loadPage('/user/', $('.nav-item').first());
+        }
+
+        // 加载页面内容
+        function loadPage(url, $item) {
+            // 更新导航状态
+            $('.nav-item').removeClass('active');
+            $item.addClass('active');
+            
+            // 更新iframe内容
+            $('#contentIframe').attr('src', url);
+        }
+
+        // Toast提示
+        function showToast(message, duration = 2000) {
+            const toast = $('<div style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; font-size: 0.9rem;">' + message + '</div>');
+            $('body').append(toast);
+            toast.fadeIn(300);
+            setTimeout(() => {
+                toast.fadeOut(300, () => {
+                    toast.remove();
+                });
+            }, duration);
+        }
+
+        // 获取当前用户名
+        function getCurrentUserName() {
+            return sessionStorage.getItem('user_name') || null;
+        }
+
+        // 退出登录
+        function logout() {
+            if (confirm('确定要退出登录吗？')) {
+                // 清除sessionStorage
+                sessionStorage.removeItem('user_id');
+                sessionStorage.removeItem('user_name');
+                
+                // 更新用户信息显示
+                updateUserNameDisplay(null);
+                updateRoleDisplay('无角色');
+                
+                // 重新加载菜单
+                renderDefaultMenu();
+                
+                // 提示退出成功
+                showToast('已成功退出登录', 2000);
+                
+                // 跳转到首页
+                loadPage('/user/', $('.nav-item').first());
+            }
+        }
+
+        // 跳转到系统设置页面
+        function goToSettings() {
+            showToast('系统设置功能开发中', 2000);
+        }
+
+        // 处理iframe内部点击关闭下拉菜单
+        function setupIframeClickHandler() {
+            const iframe = document.getElementById('contentIframe');
+            if (iframe) {
+                // 监听iframe加载完成事件
+                iframe.addEventListener('load', function() {
+                    try {
+                        // 获取iframe内部的document
+                        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+                        // 为iframe内部添加点击事件监听器
+                        iframeDoc.addEventListener('click', function() {
+                            hideUserDropdown();
+                        });
+                    } catch (e) {
+                        // 跨域时可能无法访问iframe内部，忽略错误
+                        console.log('无法访问iframe内容（可能跨域）');
+                    }
+                });
+            }
+        }
+
+        // 页面加载完成后初始化
+        $(document).ready(function() {
+            // 初始化用户名显示
+            const userName = getCurrentUserName();
+            updateUserNameDisplay(userName);
+            
+            // 点击页面其他地方关闭下拉菜单
+            $(document).on('click', function(event) {
+                if (!$(event.target).closest('.user-dropdown').length) {
+                    hideUserDropdown();
+                }
+            });
+            
+            // 阻止下拉菜单内容的点击事件冒泡
+            $('.user-dropdown-content').on('click', function(event) {
+                event.stopPropagation();
+            });
+            
+            // 设置iframe内部点击处理
+            setupIframeClickHandler();
+            
+            loadUserMenu().then(() => {
+                $('#loadingOverlay').hide();
+            });
+        });
+    </script>
+</body>
+</html>

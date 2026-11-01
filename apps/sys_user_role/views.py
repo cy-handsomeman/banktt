@@ -1,0 +1,330 @@
+from django.shortcuts import render
+from django.db import IntegrityError
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from rest_framework.decorators import action, api_view
+from apps.sys_user_role.models import SysUserRole
+from apps.sys_user_role.serializers import SysUserRoleSerializer
+from apps.sys_role_menu.models import SysRoleMenu
+from apps.sys_menu.models import SysMenu
+
+
+def sys_user_role_list(request):
+    return render(request, 'sys_user_role.html')
+
+
+# 角色ID到角色名称的映射
+ROLE_NAME_MAP = {
+    1: '超级管理员',
+    2: '大堂经理',
+    3: '普通柜员'
+}
+
+# 角色-页面权限映射配置（所有用户可访问所有菜单）
+ROLE_PAGE_PERMISSIONS = {
+    1: ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role'],
+    2: ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role'],
+    3: ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role']
+}
+
+
+@api_view(['GET'])
+def check_super_admin(request):
+    """
+    检查当前用户是否是超级管理员
+    GET /api/check_super_admin/?user_id={user_id}
+    """
+    user_id = request.query_params.get('user_id')
+    
+    if not user_id:
+        return Response({'is_super_admin': False}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        user_roles = SysUserRole.objects.filter(user_id=user_id).values_list('role_id', flat=True)
+        user_roles = list(user_roles)
+        is_super_admin = 1 in user_roles  # 角色ID为1的是超级管理员
+        return Response({'is_super_admin': is_super_admin}, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({'is_super_admin': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def get_user_menu(request):
+    """
+    获取用户有权限访问的菜单列表
+    GET /api/get_user_menu/?user_id={user_id}
+    """
+    user_id = request.query_params.get('user_id')
+    
+    if not user_id:
+        return Response(
+            {'error': '缺少参数 user_id'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    try:
+        user_id = int(user_id)
+    except ValueError:
+        return Response(
+            {'error': 'user_id 必须是整数'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+    
+    # 获取用户角色
+    user_roles = SysUserRole.objects.filter(user_id=user_id).values_list('role_id', flat=True)
+    user_roles = list(user_roles)
+    
+    # 判断是否为超级管理员
+    is_super_admin = 1 in user_roles  # 角色ID为1的是超级管理员
+    
+    # 如果是超级管理员，拥有所有权限
+    if is_super_admin:
+        allowed_pages = ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role']
+    else:
+        # 从sys_role_menu表获取角色分配的菜单权限
+        menu_ids = SysRoleMenu.objects.filter(role_id__in=user_roles).values_list('menu_id', flat=True)
+        
+        # 获取菜单的URL标识（menu_url去掉前缀和后缀）
+        allowed_pages = []
+        for menu in SysMenu.objects.filter(menu_id__in=menu_ids):
+            # 从URL中提取页面标识，如 '/user/' -> 'user'
+            url = menu.menu_url.strip('/')
+            if url == 'user':
+                allowed_pages.append('user_info')  # 客户管理
+            elif url == 'card':
+                allowed_pages.append('card_info')  # 银行卡管理
+            elif url == 'trade':
+                allowed_pages.append('trade_info')  # 交易管理
+            elif url == 'sys_user':
+                allowed_pages.append('sys_user')  # 系统用户
+            elif url == 'role':
+                allowed_pages.append('sys_role')  # 角色管理
+            elif url == 'user_role':
+                allowed_pages.append('sys_user_role')  # 用户角色关联
+    
+    # 菜单配置及固定顺序
+    menu_config = {
+        'user_info': {
+            'title': '客户管理',
+            'icon': 'fas fa-users',
+            'url': '/user/',
+            'group': '业务管理',
+            'order': 1
+        },
+        'card_info': {
+            'title': '银行卡管理',
+            'icon': 'fas fa-credit-card',
+            'url': '/card/',
+            'group': '业务管理',
+            'order': 2
+        },
+        'trade_info': {
+            'title': '交易管理',
+            'icon': 'fas fa-exchange-alt',
+            'url': '/trade/',
+            'group': '业务管理',
+            'order': 3
+        },
+        'sys_user': {
+            'title': '系统用户',
+            'icon': 'fas fa-user-circle',
+            'url': '/sys_user/',
+            'group': '权限管理',
+            'order': 1
+        },
+        'sys_role': {
+            'title': '角色管理',
+            'icon': 'fas fa-shield-alt',
+            'url': '/role/',
+            'group': '权限管理',
+            'order': 2
+        },
+        'sys_user_role': {
+            'title': '用户角色关联',
+            'icon': 'fas fa-user-shield',
+            'url': '/user_role/',
+            'group': '权限管理',
+            'order': 3
+        }
+    }
+    
+    # 构建用户菜单
+    user_menu = []
+    groups = {}
+    
+    for page_key in allowed_pages:
+        if page_key in menu_config:
+            config = menu_config[page_key]
+            group_name = config['group']
+            if group_name not in groups:
+                groups[group_name] = []
+            groups[group_name].append({
+                'key': page_key,
+                'title': config['title'],
+                'icon': config['icon'],
+                'url': config['url'],
+                'order': config['order']
+            })
+    
+    # 对每个分组的菜单项按order排序
+    for group_name in groups:
+        groups[group_name].sort(key=lambda x: x['order'])
+    
+    # 转换为有序列表
+    group_order = ['业务管理', '权限管理']
+    for group_name in group_order:
+        if group_name in groups:
+            # 如果分组没有任何菜单项，则不显示该分组
+            if len(groups[group_name]) > 0:
+                user_menu.append({
+                    'group': group_name,
+                    'items': groups[group_name],
+                    'locked': False
+                })
+    
+    # 获取角色名称列表
+    role_names = [ROLE_NAME_MAP.get(role_id, f'未知角色({role_id})') for role_id in user_roles]
+    role_names_str = ', '.join(role_names) if role_names else '无角色'
+    
+    return Response({
+        'user_id': user_id,
+        'user_roles': user_roles,
+        'role_names': role_names,
+        'role_names_str': role_names_str,
+        'is_super_admin': is_super_admin,
+        'menu': user_menu
+    })
+
+
+class SysUserRoleViewSet(viewsets.ModelViewSet):
+    queryset = SysUserRole.objects.all()
+    serializer_class = SysUserRoleSerializer
+
+    @action(detail=False, methods=['get'], url_path='user/(?P<user_id>[^/.]+)')
+    def get_user_roles(self, request, user_id=None):
+        """
+        获取用户拥有的角色列表
+        GET /api/user_role/user/{user_id}/
+        """
+        try:
+            user_roles = SysUserRole.objects.filter(user_id=user_id)
+            serializer = self.get_serializer(user_roles, many=True)
+            return Response({'user_id': user_id, 'roles': serializer.data})
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['get'], url_path='role/(?P<role_id>[^/.]+)')
+    def get_role_users(self, request, role_id=None):
+        """
+        查询角色关联的用户列表
+        GET /api/user_role/role/{role_id}/
+        """
+        try:
+            role_users = SysUserRole.objects.filter(role_id=role_id)
+            serializer = self.get_serializer(role_users, many=True)
+            return Response({'role_id': role_id, 'users': serializer.data})
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['get'], url_path='check')
+    def check_user_role(self, request):
+        """
+        判断用户是否拥有特定角色
+        GET /api/user_role/check?user_id={user_id}&role_id={role_id}
+        """
+        try:
+            user_id = request.query_params.get('user_id')
+            role_id = request.query_params.get('role_id')
+            
+            if not user_id or not role_id:
+                return Response(
+                    {'error': '缺少参数 user_id 或 role_id'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            exists = SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists()
+            return Response({
+                'user_id': user_id,
+                'role_id': role_id,
+                'has_role': exists
+            })
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['post'], url_path='batch_remove')
+    def batch_remove_roles(self, request):
+        """
+        批量移除角色
+        POST /api/user_role/batch_remove/
+        {
+            "user_ids": [1, 2, 3],
+            "role_id": 1
+        }
+        """
+        try:
+            user_ids = request.data.get('user_ids', [])
+            role_id = request.data.get('role_id')
+            
+            if not user_ids or not role_id:
+                return Response(
+                    {'error': '缺少参数 user_ids 或 role_id'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            deleted_count, _ = SysUserRole.objects.filter(
+                user_id__in=user_ids,
+                role_id=role_id
+            ).delete()
+            
+            return Response({
+                'deleted': deleted_count,
+                'message': f'成功移除 {deleted_count} 个角色关联'
+            })
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    @action(detail=False, methods=['post'], url_path='user/(?P<user_id>[^/.]+)/clear')
+    def remove_user_all_roles(self, request, user_id=None):
+        """
+        清空用户的所有角色
+        POST /api/user_role/user/{user_id}/clear/
+        """
+        try:
+            deleted_count, _ = SysUserRole.objects.filter(user_id=user_id).delete()
+            return Response({
+                'deleted': deleted_count,
+                'message': f'成功移除用户 {user_id} 的 {deleted_count} 个角色'
+            })
+        except Exception as e:
+            return Response(
+                {'error': str(e)},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+    def create(self, request, *args, **kwargs):
+        """
+        单个角色分配（重写以处理重复关联）
+        """
+        user_id = request.data.get('user_id')
+        role_id = request.data.get('role_id')
+        
+        # 先检查是否已存在
+        if SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists():
+            return Response(
+                {'error': '该用户已拥有此角色'},
+                status=status.HTTP_409_CONFLICT
+            )
+        
+        return super().create(request, *args, **kwargs)

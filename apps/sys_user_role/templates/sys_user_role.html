@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>用户角色关联管理</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/sysuserrole.css">
+</head>
+<body>
+<div class="manager">
+    <div class="header">
+        <h1><i class="fas fa-user-shield" style="margin-right: 12px;"></i>用户角色关联管理</h1>
+        <div class="header-right">
+            <div class="search-box">
+                <i class="fas fa-search search-icon"></i>
+                <input type="text" id="searchInput" class="search-input" placeholder="搜索用户ID或角色ID">
+            </div>
+            <button class="btn-refresh" id="refreshBtn"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="btn-add" id="openAddModalBtn"><i class="fas fa-plus"></i> 新增关联</button>
+        </div>
+    </div>
+    
+    <div class="table-wrapper">
+        <table class="data-table" id="dataTable">
+            <thead>
+                <tr>
+                    <th>ID</th><th>用户ID</th><th>角色ID</th><th width="100">操作</th>
+                </tr>
+            </thead>
+            <tbody id="dataTableBody">
+                <tr class="empty-row"><td colspan="4">加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-wrapper" id="paginationWrapper" style="display: none; margin-top: 20px;">
+        <div class="pagination-info" style="float: left; font-size: 0.85rem; color: #6b7280;">
+            共 <span id="totalCount">0</span> 条数据，当前第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
+        </div>
+        <div class="pagination" style="float: right; display: flex; align-items: center; gap: 6px;">
+            <button class="pagination-btn" id="firstPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">首页</button>
+            <button class="pagination-btn" id="prevPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">上一页</button>
+            <div class="page-numbers" id="pageNumbers" style="display: flex; gap: 4px;"></div>
+            <button class="pagination-btn" id="nextPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">下一页</button>
+            <button class="pagination-btn" id="lastPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">末页</button>
+        </div>
+        <div style="clear: both;"></div>
+    </div>
+</div>
+
+<div id="dataModal" class="modal-overlay">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 id="modalTitle">新增关联</h3>
+            <button class="modal-close" id="closeModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="dataForm">
+                <input type="hidden" id="editId" value="">
+                <div class="form-group">
+                    <label>用户ID <span style="color:#e03a3a;">*</span></label>
+                    <input type="number" id="user_id" placeholder="请输入用户ID" min="1">
+                </div>
+                <div class="form-group">
+                    <label>角色ID <span style="color:#e03a3a;">*</span></label>
+                    <input type="number" id="role_id" placeholder="请输入角色ID" min="1">
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" id="cancelModalBtn">取消</button>
+            <button type="button" class="btn-submit" id="submitBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<div id="batchRemoveModal" class="modal-overlay">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3>批量移除角色</h3>
+            <button class="modal-close" id="closeBatchRemoveModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="batchRemoveForm">
+                <div class="form-group">
+                    <label>用户ID列表 <span style="color:#e03a3a;">*</span></label>
+                    <textarea id="batchRemoveUserIds" placeholder="请输入用户ID，多个用逗号分隔，如: 1,2,3"></textarea>
+                </div>
+                <div class="form-group">
+                    <label>角色ID <span style="color:#e03a3a;">*</span></label>
+                    <input type="number" id="batchRemoveRoleId" placeholder="请输入角色ID" min="1">
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" id="cancelBatchRemoveBtn">取消</button>
+            <button type="button" class="btn-submit" id="submitBatchRemoveBtn">移除</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/sysuserrole.js"></script>
+</body>
+</html>

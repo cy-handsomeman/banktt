@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>登录 - 银行管理系统</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a3a5c 0%, #2c5a87 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        .login-container {
+            background: white;
+            padding: 40px 50px;
+            border-radius: 10px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            width: 380px;
+        }
+        .login-title {
+            text-align: center;
+            color: #1a3a5c;
+            margin-bottom: 30px;
+            font-size: 24px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: 500;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 12px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #2c5a87;
+        }
+        .remember-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .remember-row input[type="checkbox"] {
+            width: auto;
+            margin-right: 8px;
+        }
+        .remember-row label {
+            color: #666;
+            font-size: 14px;
+        }
+        .login-btn {
+            width: 100%;
+            padding: 12px;
+            background: #1a3a5c;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background 0.3s;
+        }
+        .login-btn:hover {
+            background: #2c5a87;
+        }
+        .message {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 14px;
+            display: none;
+        }
+        .message.error {
+            background: #ffe0e0;
+            color: #d63031;
+            display: block;
+        }
+        .message.success {
+            background: #d1f9d1;
+            color: #00b894;
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-container">
+        <h1 class="login-title">银行管理系统</h1>
+        <form id="loginForm">
+            <div class="form-group">
+                <label>用户名</label>
+                <input type="text" name="userName" id="userName" required>
+            </div>
+            <div class="form-group">
+                <label>密码</label>
+                <input type="password" name="password" id="password" required>
+            </div>
+            <div class="remember-row">
+                <input type="checkbox" id="remember">
+                <label for="remember">记住密码</label>
+            </div>
+            <button type="submit" class="login-btn">登 录</button>
+        </form>
+        <div class="message" id="message"></div>
+    </div>
+
+    <script src="/static/js/jquery.min.js"></script>
+    <script>
+        $(function() {
+            var savedUser = localStorage.getItem('savedUser');
+            var savedPass = localStorage.getItem('savedPass');
+            if (savedUser) {
+                $('#userName').val(savedUser);
+                $('#password').val(savedPass);
+                $('#remember').prop('checked', true);
+            }
+
+            $('#loginForm').on('submit', function(e) {
+                e.preventDefault();
+                var userName = $('#userName').val().trim();
+                var password = $('#password').val();
+
+                if (!userName) {
+                    showMsg('请输入用户名', 'error');
+                    return;
+                }
+                if (!password) {
+                    showMsg('请输入密码', 'error');
+                    return;
+                }
+
+                if ($('#remember').is(':checked')) {
+                    localStorage.setItem('savedUser', userName);
+                    localStorage.setItem('savedPass', password);
+                } else {
+                    localStorage.removeItem('savedUser');
+                    localStorage.removeItem('savedPass');
+                }
+
+                $.ajax({
+                    url: '/api/sys_user/login/',
+                    type: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({
+                        userName: userName,
+                        password: password
+                    }),
+                    success: function(res) {
+                        if (res.message === '登录成功') {
+                            showMsg('登录成功，正在跳转...', 'success');
+                            sessionStorage.setItem('user_id', res.user_id);
+                            sessionStorage.setItem('user_name', res.user_name);
+                            setTimeout(function() {
+                                window.location.href = '/';
+                            }, 500);
+                        } else {
+                            showMsg(res.message, 'error');
+                        }
+                    },
+                    error: function(xhr) {
+                        var res = xhr.responseJSON || {};
+                        showMsg(res.message || '登录失败', 'error');
+                    }
+                });
+            });
+
+            function showMsg(text, type) {
+                var $msg = $('#message');
+                $msg.text(text).removeClass('error success').addClass(type);
+            }
+        });
+    </script>
+</body>
+</html>
