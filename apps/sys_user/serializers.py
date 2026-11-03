@@ -6,6 +6,15 @@ class SysUserSerializer(serializers.ModelSerializer):
     class Meta:
         model = SysUser
         fields = '__all__'
+        extra_kwargs = {
+            'password': {'write_only': True, 'required': False},
+        }
+
+    def validate(self, attrs):
+        """新增时必须携带密码；修改时可不传（保持原密码）"""
+        if self.instance is None and not attrs.get('password'):
+            raise serializers.ValidationError({'password': '密码不能为空'})
+        return attrs
 
     def validate_pid(self, value):
         """身份证号唯一校验：新增与编辑时都排除自身"""
