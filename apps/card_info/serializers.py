@@ -1,6 +1,8 @@
-from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
+from rest_framework import serializers
+
 from apps.card_info.models import CardInfo
+from apps.user_info.models import UserInfo
 
 
 class CardInfoSerializer(serializers.ModelSerializer):
@@ -9,12 +11,21 @@ class CardInfoSerializer(serializers.ModelSerializer):
         fields = '__all__'
         extra_kwargs = {
             'password': {'write_only': True, 'required': False},
+            # 余额只允许通过交易接口变动，禁止直接改
+            'balance': {'read_only': True},
         }
 
     def validate(self, attrs):
-        """新增时必须携带密码；修改时可不传（保持原密码）"""
+        """新增时必须携带密码；开户金额只在新增时生效"""
         if self.instance is None and not attrs.get('password'):
             raise serializers.ValidationError({'password': '密码不能为空'})
+        if self.instance is None:
+            # 开户金额即初始余额
+            attrs['balance'] = attrs.get('open_money') or 0
+        else:
+            # 开户后开户金额不可修改，余额只能由交易产生
+            attrs.pop('open_money', None)
+            attrs.pop('balance', None)
         return attrs
 
     def validate_password(self, value):
@@ -29,8 +40,8 @@ class CardInfoSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError('开户金额不能为负数')
         return value
 
-    def validate_balance(self, value):
-        """余额不能为负数"""
-        if value < 0:
-            raise serializers.ValidationError('余额不能为负数')
+    def validate_customer_id(self, value):
+        """客户必须已存在"""
+        if not UserInfo.objects.filter(customer_id=value).exists():
+            raise serializers.ValidationError('客户不存在，请先创建客户')
         return value

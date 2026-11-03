@@ -16,11 +16,11 @@ CREATE DATABASE IF NOT EXISTS `bank`
 USE `bank`;
 
 -- ------------------------------------------------------------
--- 1. sys_user 系统用户表（models.SysUser，managed = True）
+-- 1. sys_user 系统用户表（models.SysUser，managed = False）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `sys_user` (
     `user_id`     INT          NOT NULL AUTO_INCREMENT COMMENT '用户编号（标识列），从1开始，主键',
-    `user_name`   VARCHAR(100) NOT NULL                COMMENT '用户名，必填',
+    `user_name`   VARCHAR(100) NOT NULL                COMMENT '用户名，必填且唯一',
     `pid`         VARCHAR(18)  NOT NULL                COMMENT '身份证号，必填',
     `email`       VARCHAR(100) DEFAULT NULL            COMMENT '邮箱，非必填',
     `mobile`      VARCHAR(20)  NOT NULL                COMMENT '手机号，必填',
@@ -28,7 +28,8 @@ CREATE TABLE IF NOT EXISTS `sys_user` (
     `password`    VARCHAR(100) NOT NULL                COMMENT '密码（加密存储），必填',
     `create_time` DATETIME     NOT NULL                COMMENT '创建时间，必填',
     `update_time` DATETIME     DEFAULT NULL            COMMENT '更新时间，非必填',
-    PRIMARY KEY (`user_id`)
+    PRIMARY KEY (`user_id`),
+    UNIQUE KEY `uk_user_name` (`user_name`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '系统用户表';
 
 -- ------------------------------------------------------------
@@ -76,6 +77,7 @@ CREATE TABLE IF NOT EXISTS `sys_role_menu` (
     `role_id` INT NOT NULL                COMMENT '角色ID，关联sys_role表',
     `menu_id` INT NOT NULL                COMMENT '菜单ID，关联sys_menu表',
     PRIMARY KEY (`id`),
+    UNIQUE KEY `uk_role_menu` (`role_id`, `menu_id`),
     CONSTRAINT `fk_role_menu_role` FOREIGN KEY (`role_id`) REFERENCES `sys_role` (`role_id`) ON DELETE CASCADE,
     CONSTRAINT `fk_role_menu_menu` FOREIGN KEY (`menu_id`) REFERENCES `sys_menu` (`menu_id`) ON DELETE CASCADE
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '角色菜单关联表';
@@ -98,10 +100,10 @@ CREATE TABLE IF NOT EXISTS `user_info` (
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `card_info` (
     `card_id`     VARCHAR(20)   NOT NULL           COMMENT '卡号，主键',
-    `cur_type`    VARCHAR(10)   NOT NULL           COMMENT '货币类型，必填',
+    `cur_type`    VARCHAR(3)    NOT NULL           COMMENT '货币类型，必填',
     `open_date`   DATETIME      NOT NULL           COMMENT '开户日期，必填',
-    `open_money`  DECIMAL(15,2) NOT NULL           COMMENT '开户金额，必填',
-    `balance`     DECIMAL(15,2) NOT NULL           COMMENT '余额，必填',
+    `open_money`  DECIMAL(18,2) NOT NULL           COMMENT '开户金额，必填',
+    `balance`     DECIMAL(18,2) NOT NULL           COMMENT '余额，必填',
     `password`    VARCHAR(100)  NOT NULL           COMMENT '密码（加密存储），必填',
     `customer_id` INT           NOT NULL           COMMENT '客户编号，外键关联user_info表',
     PRIMARY KEY (`card_id`),
@@ -116,10 +118,42 @@ CREATE TABLE IF NOT EXISTS `trade_info` (
     `trans_type`  VARCHAR(50)   NOT NULL                COMMENT '交易类型，必填',
     `card_id`     VARCHAR(20)   NOT NULL                COMMENT '银行卡号，必填',
     `trans_date`  DATETIME      NOT NULL                COMMENT '交易日期，必填',
-    `trans_money` DECIMAL(15,2) NOT NULL                COMMENT '交易金额，必填',
+    `trans_money` DECIMAL(18,2) NOT NULL                COMMENT '交易金额，必填',
     `remark`      VARCHAR(200)  DEFAULT NULL            COMMENT '备注，非必填',
     PRIMARY KEY (`tid`),
     CONSTRAINT `fk_trade_card` FOREIGN KEY (`card_id`) REFERENCES `card_info` (`card_id`)
 ) ENGINE = InnoDB DEFAULT CHARSET = utf8mb4 COLLATE = utf8mb4_general_ci COMMENT = '交易信息表';
+
+-- ------------------------------------------------------------
+-- 9. 初始化数据（可重复执行；用于新环境首次启动即可登录）
+--    默认账号：admin / admin123 （登录后请立即修改密码）
+-- ------------------------------------------------------------
+INSERT IGNORE INTO `sys_role` (`role_id`, `role_name`, `description`) VALUES
+    (1, '超管',     '超级管理员，拥有全部权限'),
+    (2, '大堂经理', '业务与权限管理'),
+    (3, '银行柜员', '日常柜面业务');
+
+INSERT IGNORE INTO `sys_menu` (`menu_id`, `menu_name`, `menu_url`, `parent_id`, `sort_order`, `remark`) VALUES
+    (1, '客户管理',     '/user/',      0, 1, '客户信息维护'),
+    (2, '银行卡管理',   '/card/',      0, 2, '银行卡开户与维护'),
+    (3, '交易管理',     '/trade/',     0, 3, '存取款与转账流水'),
+    (4, '系统用户',     '/sys_user/',  0, 4, '系统账号维护'),
+    (5, '角色管理',     '/role/',      0, 5, '角色维护'),
+    (6, '用户角色关联', '/user_role/', 0, 6, '账号与角色绑定');
+
+INSERT IGNORE INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES
+    (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
+    (2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6),
+    (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6);
+
+-- 初始管理员（密码为 pbkdf2 哈希，明文 admin123；请勿直接改写为明文）
+INSERT IGNORE INTO `sys_user`
+    (`user_id`, `user_name`, `pid`, `email`, `mobile`, `address`, `password`, `create_time`)
+VALUES
+    (1, 'admin', '110101199001010011', 'admin@example.com', '13800000000', '系统管理员',
+     'pbkdf2_sha256$870000$yHjAUR09WQGpz0UbF4anHF$ZGwHjmOJ5TT22PVFkhvekJ7fw1NGFu54dEhqdY+edRk=',
+     NOW());
+
+INSERT IGNORE INTO `sys_user_role` (`user_id`, `role_id`) VALUES (1, 1);
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -36,7 +36,6 @@ function renderUserTable(users) {
                 <td>${escapeHtml(user.email || '—')}</td>
                 <td>${escapeHtml(user.mobile || '—')}</td>
                 <td>${escapeHtml(user.address || '—')}</td>
-                <td>${escapeHtml(user.password || '—')}</td>
                 <td>${createTimeShow}</td>
                 <td>${updateTimeShow}</td>
                 <td class="action-buttons">

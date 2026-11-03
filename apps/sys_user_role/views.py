@@ -7,6 +7,7 @@ from apps.sys_user_role.models import SysUserRole
 from apps.sys_user_role.serializers import SysUserRoleSerializer
 from apps.sys_role_menu.models import SysRoleMenu
 from apps.sys_menu.models import SysMenu
+from apps.sys_user.permissions import IsSuperAdminOrReadOnly
 
 
 def sys_user_role_list(request):
@@ -20,59 +21,34 @@ ROLE_NAME_MAP = {
     3: '普通柜员'
 }
 
-# 角色-页面权限映射配置（所有用户可访问所有菜单）
-ROLE_PAGE_PERMISSIONS = {
-    1: ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role'],
-    2: ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role'],
-    3: ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role']
-}
-
 
 @api_view(['GET'])
 def check_super_admin(request):
     """
-    检查当前用户是否是超级管理员
-    GET /api/check_super_admin/?user_id={user_id}
+    检查当前登录用户是否是超级管理员
+    GET /api/check_super_admin/
     """
-    user_id = request.query_params.get('user_id')
-    
-    if not user_id:
-        return Response({'is_super_admin': False}, status=status.HTTP_400_BAD_REQUEST)
-    
-    try:
-        user_roles = SysUserRole.objects.filter(user_id=user_id).values_list('role_id', flat=True)
-        user_roles = list(user_roles)
-        is_super_admin = 1 in user_roles  # 角色ID为1的是超级管理员
-        return Response({'is_super_admin': is_super_admin}, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({'is_super_admin': False}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    user_roles = list(
+        SysUserRole.objects.filter(user_id=request.user.pk).values_list('role_id', flat=True)
+    )
+    return Response(
+        {'is_super_admin': 1 in user_roles},
+        status=status.HTTP_200_OK
+    )
 
 
 @api_view(['GET'])
 def get_user_menu(request):
     """
-    获取用户有权限访问的菜单列表
-    GET /api/get_user_menu/?user_id={user_id}
+    获取当前登录用户有权限访问的菜单列表
+    GET /api/get_user_menu/
     """
-    user_id = request.query_params.get('user_id')
-    
-    if not user_id:
-        return Response(
-            {'error': '缺少参数 user_id'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
-    try:
-        user_id = int(user_id)
-    except ValueError:
-        return Response(
-            {'error': 'user_id 必须是整数'},
-            status=status.HTTP_400_BAD_REQUEST
-        )
-    
+    user_id = request.user.pk
+
     # 获取用户角色
-    user_roles = SysUserRole.objects.filter(user_id=user_id).values_list('role_id', flat=True)
-    user_roles = list(user_roles)
+    user_roles = list(
+        SysUserRole.objects.filter(user_id=user_id).values_list('role_id', flat=True)
+    )
     
     # 判断是否为超级管理员
     is_super_admin = 1 in user_roles  # 角色ID为1的是超级管理员
@@ -197,8 +173,9 @@ def get_user_menu(request):
 
 
 class SysUserRoleViewSet(viewsets.ModelViewSet):
-    queryset = SysUserRole.objects.all()
+    queryset = SysUserRole.objects.all().order_by('user_id', 'role_id')
     serializer_class = SysUserRoleSerializer
+    permission_classes = [IsSuperAdminOrReadOnly]
     filterset_fields = ['user_id', 'role_id']
 
     @action(detail=False, methods=['get'], url_path='user/(?P<user_id>[^/.]+)')

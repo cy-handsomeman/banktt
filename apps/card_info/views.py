@@ -9,7 +9,7 @@ def card_info_list(request):
 
 
 class CardInfoViewSet(viewsets.ModelViewSet):
-    queryset = CardInfo.objects.all()
+    queryset = CardInfo.objects.all().order_by('card_id')
     serializer_class = CardInfoSerializer
     filterset_fields = ['card_id', 'cur_type', 'customer_id']
     search_fields = ['card_id', 'cur_type']

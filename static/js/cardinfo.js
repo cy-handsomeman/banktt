@@ -25,7 +25,6 @@ function renderTable(data) {
             <td>${openDate}</td>
             <td class="money-cell">${openMoney}</td>
             <td class="money-cell">${balance}</td>
-            <td>${escapeHtml(item.password) || '—'}</td>
             <td>${item.customer_id}</td>
             <td class="action-buttons">
                 <button class="edit-btn" data-id="${item.card_id}"><i class="fas fa-edit"></i></button>

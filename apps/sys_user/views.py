@@ -7,6 +7,7 @@ from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
 from apps.sys_user.models import SysUser
 from apps.sys_user.serializers import SysUserSerializer
+from apps.sys_user.permissions import IsSuperAdminOrReadOnly
 
 
 def sys_user_list(request):
@@ -17,6 +18,7 @@ def sys_user_list(request):
 class SysUserViewSet(viewsets.ModelViewSet):
     queryset = SysUser.objects.all().order_by('create_time')
     serializer_class = SysUserSerializer
+    permission_classes = [IsSuperAdminOrReadOnly]
     filterset_fields = ['user_id', 'user_name', 'mobile', 'pid']
     search_fields = ['user_name', 'mobile', 'pid', 'email', 'address']
     
@@ -44,14 +46,10 @@ class SysUserViewSet(viewsets.ModelViewSet):
             )
 
         user = SysUser.objects.filter(user_name=user_name).first()
-        if user is None:
+        if user is None or not check_password(password, user.password):
+            # 统一提示，避免通过错误信息枚举账号
             return Response(
-                {'code': 40101, 'message': '用户名不存在', 'data': None},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
-        if not check_password(password, user.password):
-            return Response(
-                {'code': 40102, 'message': '密码错误', 'data': None},
+                {'code': 40101, 'message': '用户名或密码错误', 'data': None},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 

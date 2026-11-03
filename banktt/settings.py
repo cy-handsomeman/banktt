@@ -14,6 +14,8 @@ import os
 from datetime import timedelta
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -42,13 +44,22 @@ _load_env_file(BASE_DIR / '.env')
 # See https://docs.djangoproject.com/en/5.1/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-# 以下三项均从 .env 读取；缺失时回退到开发默认值（生产环境必须配置环境变量）
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'django-insecure-dev-only-change-in-production')
+DEBUG = os.environ.get('DJANGO_DEBUG', 'False').lower() in ('1', 'true', 'yes')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('1', 'true', 'yes')
+# 生产环境必须显式配置秘钥；开发环境允许使用临时默认值
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
+if not SECRET_KEY:
+    if DEBUG:
+        SECRET_KEY = 'django-insecure-dev-only-change-in-production'
+    else:
+        raise ImproperlyConfigured('DJANGO_SECRET_KEY 未配置：请复制 .env.example 为 .env 并填写秘钥')
 
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',') if host.strip()]
+if not ALLOWED_HOSTS and DEBUG:
+    ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
+
+# 允许同源 iframe 嵌套，同时开启防点击劫持
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 
 # Application definition
@@ -82,7 +93,7 @@ MIDDLEWARE = [
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
-    # 'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 禁用X-Frame-Options以允许iframe加载
+    'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 同源 iframe 可用，跨站禁止嵌套
 ]
 
 ROOT_URLCONF = 'banktt.urls'
@@ -161,6 +172,9 @@ STATICFILES_DIRS = [
     os.path.join(BASE_DIR,'static'),
 ]
 
+# collectstatic 输出目录（生产部署用）
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
 MEDIA_URL = '/media/'
 
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
@@ -182,9 +196,18 @@ REST_FRAMEWORK = {
     ),
     # 接口文档配置
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
-    # 分页,默认每页10条
-    'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
+    # 分页：支持前端通过 page_size 指定每页条数
+    'DEFAULT_PAGINATION_CLASS': 'banktt.pagination.StandardPagination',
     'PAGE_SIZE': 10,
+    # 限流：防止登录暴力破解与接口滥用
+    'DEFAULT_THROTTLE_CLASSES': [
+        'rest_framework.throttling.AnonRateThrottle',
+        'rest_framework.throttling.UserRateThrottle',
+    ],
+    'DEFAULT_THROTTLE_RATES': {
+        'anon': '30/minute',
+        'user': '300/minute',
+    },
     # 解析器
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',

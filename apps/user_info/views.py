@@ -9,7 +9,7 @@ def user_info_list(request):
 
 
 class UserViewSet(viewsets.ModelViewSet):
-    queryset = UserInfo.objects.all()
+    queryset = UserInfo.objects.all().order_by('customer_id')
     serializer_class = UserSerializer
     filterset_fields = ['customer_id', 'customer_name', 'pid', 'telephone']
     search_fields = ['customer_name', 'pid', 'telephone', 'address']

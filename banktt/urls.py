@@ -2,6 +2,7 @@ from django.conf import settings
 from django.conf.urls.static import static
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+from rest_framework_simplejwt.views import TokenRefreshView
 from django.shortcuts import render
 
 def index(request):
@@ -27,6 +28,9 @@ urlpatterns = [
     path('api/', include('apps.sys_role_menu.urls')),
     path('api/', include('apps.sys_user.urls')),
     path('api/', include('apps.sys_user_role.urls')),
+
+    # JWT 刷新：refresh 有效期内可换取新的 access
+    path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
     # 新版 API 文档（替换原来的 include_docs_urls）
     path('api/schema/', SpectacularAPIView.as_view(), name='schema'),

@@ -21,11 +21,11 @@
         <table class="data-table" id="dataTable">
             <thead>
                 <tr>
-                    <th>卡号</th><th>货币类型</th><th>开户日期</th><th>开户金额</th><th>余额</th><th>密码</th><th>用户ID</th><th width="100">操作</th>
+                    <th>卡号</th><th>货币类型</th><th>开户日期</th><th>开户金额</th><th>余额</th><th>用户ID</th><th width="100">操作</th>
                 </tr>
             </thead>
             <tbody id="dataTableBody">
-                <tr class="empty-row"><td colspan="8">加载中...</td></tr>
+                <tr class="empty-row"><td colspan="7">加载中...</td></tr>
             </tbody>
         </table>
     </div>
@@ -83,8 +83,8 @@
                         <input type="number" id="open_money" placeholder="0.00" step="0.01" min="0">
                     </div>
                     <div class="form-group">
-                        <label>余额 <span style="color:#e03a3a;">*</span></label>
-                        <input type="number" id="balance" placeholder="0.00" step="0.01" min="0">
+                        <label>余额</label>
+                        <input type="number" id="balance" placeholder="开户后由交易自动变动" step="0.01" readonly>
                     </div>
                 </div>
                 <div class="form-group">

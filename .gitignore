@@ -16,6 +16,10 @@ env/
 db.sqlite3
 *.sqlite3
 
+# ==== 静态/媒体产物 ====
+staticfiles/
+media/
+
 # ==== 编辑器 / IDE ====
 .vscode/
 .idea/
