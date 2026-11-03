@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
 from apps.card_info.models import CardInfo
 
 
@@ -15,6 +16,12 @@ class CardInfoSerializer(serializers.ModelSerializer):
         if self.instance is None and not attrs.get('password'):
             raise serializers.ValidationError({'password': '密码不能为空'})
         return attrs
+
+    def validate_password(self, value):
+        """入库前统一做哈希，禁止明文落库"""
+        if not value:
+            return value
+        return make_password(value)
 
     def validate_open_money(self, value):
         """开户金额不能为负数"""

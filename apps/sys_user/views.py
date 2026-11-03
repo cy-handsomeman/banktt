@@ -1,4 +1,5 @@
 from django.shortcuts import render
+from django.contrib.auth.hashers import check_password
 from rest_framework import viewsets, status  # 需要添加 status
 from rest_framework.response import Response  # 需要添加 Response
 from rest_framework.decorators import action
@@ -41,7 +42,7 @@ class SysUserViewSet(viewsets.ModelViewSet):
                 {'code': 40101, 'message': '用户名不存在', 'data': None},
                 status=status.HTTP_401_UNAUTHORIZED
             )
-        if password != user.password:
+        if not check_password(password, user.password):
             return Response(
                 {'code': 40102, 'message': '密码错误', 'data': None},
                 status=status.HTTP_401_UNAUTHORIZED

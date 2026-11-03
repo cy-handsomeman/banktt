@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.contrib.auth.hashers import make_password
 from apps.sys_user.models import SysUser
 
 #传输数据防止数据丢失
@@ -15,6 +16,12 @@ class SysUserSerializer(serializers.ModelSerializer):
         if self.instance is None and not attrs.get('password'):
             raise serializers.ValidationError({'password': '密码不能为空'})
         return attrs
+
+    def validate_password(self, value):
+        """入库前统一做哈希，禁止明文落库"""
+        if not value:
+            return value
+        return make_password(value)
 
     def validate_pid(self, value):
         """身份证号唯一校验：新增与编辑时都排除自身"""
