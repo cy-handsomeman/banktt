@@ -14,6 +14,8 @@ def sys_user_list(request):
 class SysUserViewSet(viewsets.ModelViewSet):
     queryset = SysUser.objects.all().order_by('create_time')
     serializer_class = SysUserSerializer
+    filterset_fields = ['user_id', 'user_name', 'mobile', 'pid']
+    search_fields = ['user_name', 'mobile', 'pid', 'email', 'address']
     
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request):

@@ -61,6 +61,7 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     'rest_framework',
+    'django_filters',
     'drf_spectacular',
     'rest_framework_simplejwt',
     'apps.user_info',
@@ -191,9 +192,10 @@ REST_FRAMEWORK = {
     ],
     # 搜索参数
     'SEARCH_PARAM': 'search',
-    # 过滤后端
-    'FILTER_BACKENDS': [
-        'rest_framework.filters.DjangoFilterBackend',
+    # 过滤与搜索后端
+    'DEFAULT_FILTER_BACKENDS': [
+        'django_filters.rest_framework.DjangoFilterBackend',
+        'rest_framework.filters.SearchFilter',
     ],
 }
 

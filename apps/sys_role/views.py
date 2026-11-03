@@ -11,3 +11,5 @@ def sys_role_list(request):
 class SysRoleViewSet(viewsets.ModelViewSet):
     queryset = SysRole.objects.all()
     serializer_class = SysRoleSerializer
+    filterset_fields = ['role_id', 'role_name']
+    search_fields = ['role_name', 'description']

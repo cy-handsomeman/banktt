@@ -13,6 +13,8 @@ def card_info_list(request):
 class CardInfoViewSet(viewsets.ModelViewSet):
     queryset = CardInfo.objects.all()
     serializer_class = CardInfoSerializer
+    filterset_fields = ['card_id', 'cur_type', 'customer_id']
+    search_fields = ['card_id', 'cur_type']
 
     # ↓ 把这段代码放在这里 ↓
     @action(detail=False, methods=['get'], url_path='(?P<cardId>[^/.]+)')

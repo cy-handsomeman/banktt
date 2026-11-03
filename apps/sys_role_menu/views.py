@@ -8,6 +8,7 @@ from apps.sys_role_menu.serializers import SysRoleMenuSerializer
 class SysRoleMenuViewSet(viewsets.ModelViewSet):
     queryset = SysRoleMenu.objects.all()
     serializer_class = SysRoleMenuSerializer
+    filterset_fields = ['role_id', 'menu_id']
 
     def get_queryset(self):
         queryset = super().get_queryset()

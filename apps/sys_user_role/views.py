@@ -199,6 +199,7 @@ def get_user_menu(request):
 class SysUserRoleViewSet(viewsets.ModelViewSet):
     queryset = SysUserRole.objects.all()
     serializer_class = SysUserRoleSerializer
+    filterset_fields = ['user_id', 'role_id']
 
     @action(detail=False, methods=['get'], url_path='user/(?P<user_id>[^/.]+)')
     def get_user_roles(self, request, user_id=None):

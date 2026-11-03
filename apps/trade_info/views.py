@@ -11,3 +11,5 @@ def trade_info_list(request):
 class TradeInfoViewSet(viewsets.ModelViewSet):
     queryset = TradeInfo.objects.all()
     serializer_class = TradeInfoSerializer
+    filterset_fields = ['trans_type', 'card_id']
+    search_fields = ['trans_type', 'card_id', 'remark']
