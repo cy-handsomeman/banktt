@@ -1,5 +1,3 @@
-from django.views.decorators.csrf import csrf_exempt
-from django.utils.decorators import method_decorator
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action
@@ -18,10 +16,8 @@ class SysRoleMenuViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(role_id=role_id)
         return queryset
 
-    @method_decorator(csrf_exempt)
     @action(detail=False, methods=['post'], url_path='batch')
     def batch_save(self, request):
-        print("请求数据:", request.data)
         role_id = request.data.get('role_id')
         menu_ids = request.data.get('menu_ids', [])
 
@@ -36,5 +32,4 @@ class SysRoleMenuViewSet(viewsets.ModelViewSet):
 
             return Response({'success': True}, status=status.HTTP_200_OK)
         except Exception as e:
-            print("保存失败:", str(e))
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
