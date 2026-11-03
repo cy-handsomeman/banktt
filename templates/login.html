@@ -158,10 +158,12 @@
                         password: password
                     }),
                     success: function(res) {
-                        if (res.message === '登录成功') {
+                        if (res.code === 0) {
                             showMsg('登录成功，正在跳转...', 'success');
-                            sessionStorage.setItem('user_id', res.user_id);
-                            sessionStorage.setItem('user_name', res.user_name);
+                            sessionStorage.setItem('user_id', res.data.user_id);
+                            sessionStorage.setItem('user_name', res.data.user_name);
+                            sessionStorage.setItem('access_token', res.data.access);
+                            sessionStorage.setItem('refresh_token', res.data.refresh);
                             setTimeout(function() {
                                 window.location.href = '/';
                             }, 500);

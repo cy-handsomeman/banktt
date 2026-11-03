@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.1/ref/settings/
 """
 
 import os
+from datetime import timedelta
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -175,9 +176,9 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',
     ],
-    # 使用JWT作为认证方式
+    # 使用JWT作为认证方式（自定义认证类适配 sys_user 表）
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'apps.sys_user.authentication.SysUserJWTAuthentication',
     ),
     # 接口文档配置
     'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
@@ -204,4 +205,13 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Cybank API',
     'DESCRIPTION': '银行系统API文档',
     'VERSION': '1.0.0',
+}
+
+# simplejwt 配置（适配 sys_user 表：主键字段为 user_id）
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
+    'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'USER_ID_FIELD': 'user_id',
+    'USER_ID_CLAIM': 'user_id',
 }

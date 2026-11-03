@@ -2,6 +2,7 @@ from django.shortcuts import render
 from rest_framework import viewsets, status  # 需要添加 status
 from rest_framework.response import Response  # 需要添加 Response
 from rest_framework.decorators import action
+from rest_framework_simplejwt.tokens import RefreshToken
 from apps.sys_user.models import SysUser
 from apps.sys_user.serializers import SysUserSerializer
 
@@ -19,30 +20,44 @@ class SysUserViewSet(viewsets.ModelViewSet):
     
     @action(detail=False, methods=['post'], url_path='login')
     def login(self, request):
-        """
-        登录接口
-        """
-        userName = request.data.get('userName')
+        """登录接口：校验通过后签发 access / refresh token"""
+        user_name = request.data.get('userName')
         password = request.data.get('password')
-        try:
-            if not userName or userName.strip() == '':
-                return Response({'message': '用户名不能为空'})
-            userQuerySet = SysUser.objects.filter(user_name = userName)
-            if userQuerySet:
-                user = userQuerySet.first()
-                password1 = user.password
-                if password == password1:
-                    return Response({
-                        'message': '登录成功',
-                        'user_id': user.user_id,
-                        'user_name': user.user_name
-                    })
-                else:
-                    return Response({'message': '密码错误'})
-            else:
-                return Response({'message': '用户名不存在'})
-        except Exception as e:
+
+        if not user_name or str(user_name).strip() == '':
             return Response(
-                {'error': str(e)},
+                {'code': 40001, 'message': '用户名不能为空', 'data': None},
                 status=status.HTTP_400_BAD_REQUEST
             )
+        if not password:
+            return Response(
+                {'code': 40002, 'message': '密码不能为空', 'data': None},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = SysUser.objects.filter(user_name=user_name).first()
+        if user is None:
+            return Response(
+                {'code': 40101, 'message': '用户名不存在', 'data': None},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        if password != user.password:
+            return Response(
+                {'code': 40102, 'message': '密码错误', 'data': None},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+
+        refresh = RefreshToken.for_user(user)
+        return Response(
+            {
+                'code': 0,
+                'message': '登录成功',
+                'data': {
+                    'user_id': user.user_id,
+                    'user_name': user.user_name,
+                    'access': str(refresh.access_token),
+                    'refresh': str(refresh),
+                },
+            },
+            status=status.HTTP_200_OK
+        )
