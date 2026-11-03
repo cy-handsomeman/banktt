@@ -688,6 +688,8 @@
                 // 清除sessionStorage
                 sessionStorage.removeItem('user_id');
                 sessionStorage.removeItem('user_name');
+                sessionStorage.removeItem('access_token');
+                sessionStorage.removeItem('refresh_token');
                 
                 // 更新用户信息显示
                 updateUserNameDisplay(null);
@@ -732,6 +734,22 @@
 
         // 页面加载完成后初始化
         $(document).ready(function() {
+            // 统一给所有 API 请求带上 JWT，未登录则跳转登录页
+            const accessToken = sessionStorage.getItem('access_token');
+            if (!accessToken) {
+                window.location.href = '/login/';
+                return;
+            }
+            $.ajaxSetup({
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            });
+            $(document).ajaxError(function(event, jqXHR) {
+                if (jqXHR.status === 401) {
+                    sessionStorage.clear();
+                    window.location.href = '/login/';
+                }
+            });
+
             // 初始化用户名显示
             const userName = getCurrentUserName();
             updateUserNameDisplay(userName);

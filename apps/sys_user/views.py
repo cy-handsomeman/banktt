@@ -1,6 +1,7 @@
 from django.shortcuts import render
 from django.contrib.auth.hashers import check_password
 from rest_framework import viewsets, status  # 需要添加 status
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response  # 需要添加 Response
 from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -19,7 +20,13 @@ class SysUserViewSet(viewsets.ModelViewSet):
     filterset_fields = ['user_id', 'user_name', 'mobile', 'pid']
     search_fields = ['user_name', 'mobile', 'pid', 'email', 'address']
     
-    @action(detail=False, methods=['post'], url_path='login')
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='login',
+        permission_classes=[AllowAny],   # 白名单：登录不需要 token
+        authentication_classes=[],       # 忽略请求头里可能过期的 token
+    )
     def login(self, request):
         """登录接口：校验通过后签发 access / refresh token"""
         user_name = request.data.get('userName')

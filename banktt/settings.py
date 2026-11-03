@@ -172,9 +172,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 REST_FRAMEWORK = {
     
-    # 默认使用Django的权限系统
+    # 默认要求登录（携带合法 JWT），仅登录、接口文档等白名单接口放行
     'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+        'rest_framework.permissions.IsAuthenticated',
     ],
     # 使用JWT作为认证方式（自定义认证类适配 sys_user 表）
     'DEFAULT_AUTHENTICATION_CLASSES': (
@@ -205,6 +205,9 @@ SPECTACULAR_SETTINGS = {
     'TITLE': 'Cybank API',
     'DESCRIPTION': '银行系统API文档',
     'VERSION': '1.0.0',
+    # 文档接口白名单：无需 token 即可访问 schema / swagger
+    'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
+    'SERVE_AUTHENTICATION': [],
 }
 
 # simplejwt 配置（适配 sys_user 表：主键字段为 user_id）
