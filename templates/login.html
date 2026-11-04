@@ -119,6 +119,12 @@
     <script src="/static/js/jquery.min.js"></script>
     <script>
         $(function() {
+            // 已经登录过（会话里还有 access token）就不再重复登录，直接回工作台
+            if (sessionStorage.getItem('access_token')) {
+                window.location.replace('/');
+                return;
+            }
+
             var savedUser = localStorage.getItem('savedUser');
             localStorage.removeItem('savedPass');  // 清理历史版本残留的明文密码
             if (savedUser) {
@@ -174,7 +180,18 @@
                     },
                     error: function(xhr) {
                         var res = xhr.responseJSON || {};
-                        showMsg(res.message || '登录失败', 'error');
+                        // 后端校验失败返回 message，限流/异常返回 detail，逐层兜底
+                        var msg = res.message || res.detail || res.error;
+                        if (!msg && xhr.status === 429) {
+                            msg = '登录尝试过于频繁，请稍后再试';
+                        }
+                        if (!msg && xhr.status === 0) {
+                            msg = '无法连接服务器，请检查网络';
+                        }
+                        if (!msg && xhr.status >= 500) {
+                            msg = '服务器内部错误，请稍后重试';
+                        }
+                        showMsg(msg || '登录失败', 'error');
                     }
                 });
             });

@@ -61,6 +61,21 @@ if not ALLOWED_HOSTS and DEBUG:
 # 允许同源 iframe 嵌套，同时开启防点击劫持
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 
+# 通用安全响应头：禁止浏览器猜测内容类型，跨站跳转不泄露完整来源
+SECURE_CONTENT_TYPE_NOSNIFF = True
+SECURE_REFERRER_POLICY = 'same-origin'
+
+# 生产环境（DEBUG=False）才启用 HTTPS 相关加固，避免本地开发被强制跳转
+if not DEBUG:
+    SESSION_COOKIE_SECURE = os.environ.get('DJANGO_SECURE_COOKIES', 'True').lower() in ('1', 'true', 'yes')
+    CSRF_COOKIE_SECURE = SESSION_COOKIE_SECURE
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+    SECURE_HSTS_SECONDS = int(os.environ.get('DJANGO_HSTS_SECONDS', '31536000'))
+    SECURE_HSTS_INCLUDE_SUBDOMAINS = True
+    SECURE_HSTS_PRELOAD = True
+    # 是否强制把 http 请求重定向到 https，反向代理已做跳转时可关闭
+    SECURE_SSL_REDIRECT = os.environ.get('DJANGO_SECURE_SSL_REDIRECT', 'True').lower() in ('1', 'true', 'yes')
+
 
 # Application definition
 
@@ -168,7 +183,7 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.1/howto/static-files/
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 STATICFILES_DIRS = [
     os.path.join(BASE_DIR,'static'),
@@ -209,6 +224,8 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '30/minute',
         'user': '300/minute',
+        # 登录接口单独收紧，降低撞库与暴力破解的成功率
+        'login': '10/minute',
     },
     # 解析器
     'DEFAULT_PARSER_CLASSES': [
@@ -233,6 +250,17 @@ SPECTACULAR_SETTINGS = {
     # 文档接口白名单：无需 token 即可访问 schema / swagger
     'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
     'SERVE_AUTHENTICATION': [],
+    # 声明 Bearer 认证方案，Swagger 页面才会出现 Authorize 按钮
+    'COMPONENTS': {
+        'securitySchemes': {
+            'jwtAuth': {
+                'type': 'http',
+                'scheme': 'bearer',
+                'bearerFormat': 'JWT',
+            },
+        },
+    },
+    'SECURITY': [{'jwtAuth': []}],
 }
 
 # simplejwt 配置（适配 sys_user 表：主键字段为 user_id）
@@ -242,4 +270,34 @@ SIMPLE_JWT = {
     'AUTH_HEADER_TYPES': ('Bearer',),
     'USER_ID_FIELD': 'user_id',
     'USER_ID_CLAIM': 'user_id',
+}
+
+# 日志：统一走控制台，级别可由环境变量调整；便于排查 5xx 与登录异常
+LOG_LEVEL = os.environ.get('DJANGO_LOG_LEVEL', 'INFO')
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{asctime}] {levelname} {name}: {message}',
+            'style': '{',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+        },
+    },
+    'root': {
+        'handlers': ['console'],
+        'level': LOG_LEVEL,
+    },
+    'loggers': {
+        'django.request': {
+            'handlers': ['console'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+    },
 }

@@ -7,6 +7,7 @@ from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response  # 需要添加 Response
 from rest_framework.decorators import action
+from rest_framework.throttling import ScopedRateThrottle
 from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 from apps.sys_user.models import SysLoginLog, SysUser
@@ -63,6 +64,8 @@ class SysUserViewSet(viewsets.ModelViewSet):
     permission_classes = [IsSuperAdmin]
     filterset_fields = ['user_id', 'user_name', 'mobile', 'pid']
     search_fields = ['user_name', 'mobile', 'pid', 'email', 'address']
+    # 仅在 login action 使用 ScopedRateThrottle 时生效
+    throttle_scope = 'login'
 
     def perform_destroy(self, instance):
         # 不能删除自己，也不能在还绑定角色时直接删除账号
@@ -82,6 +85,7 @@ class SysUserViewSet(viewsets.ModelViewSet):
         url_path='login',
         permission_classes=[AllowAny],   # 白名单：登录不需要 token
         authentication_classes=[],       # 忽略请求头里可能过期的 token
+        throttle_classes=[ScopedRateThrottle],  # 登录接口单独限流，防暴力破解
     )
     def login(self, request):
         """登录接口：校验通过后签发 access / refresh token，并记录登录日志"""

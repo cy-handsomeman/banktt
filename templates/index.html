@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>银行管理系统</title>
-    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <script src="/static/js/jquery.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -437,7 +437,7 @@
                     </div>
                 </div>
             </header>
-            <iframe id="contentIframe" class="iframe-container" src="" frameborder="0"></iframe>
+            <iframe id="contentIframe" class="iframe-container" src="about:blank" frameborder="0"></iframe>
         </main>
     </div>
 
@@ -480,26 +480,37 @@
             $('#dropdownUserName').text(userName || '-');
         }
 
-        // 从sessionStorage获取当前用户ID
-        function getCurrentUserId() {
-            const userId = sessionStorage.getItem('user_id');
-            return userId ? parseInt(userId) : null;
+        // 转义数据库内容，避免菜单名/图标里的 HTML 被当作标签执行
+        function escapeHtml(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        // 菜单地址只允许同源相对路径，拒绝 //evil.com、/\evil.com 与 javascript: 等写法
+        function safeMenuUrl(url) {
+            const value = String(url || '').trim();
+            if (!value || value.charAt(0) !== '/' || /^\/[\/\\]/.test(value)) {
+                return null;
+            }
+            return value;
         }
 
         // 获取用户菜单
         function loadUserMenu() {
-            const userId = getCurrentUserId();
-            
-            // 没有登录用户ID 说明未登录或会话已失效，直接回登录页
-            if (!userId) {
+            // 页面能打开（Cookie 有效）不代表接口可用，仍以 sessionStorage 里的 token 为准
+            if (!sessionStorage.getItem('access_token')) {
                 window.location.href = '/login/';
                 return Promise.resolve();
             }
-            
+
+            // 后端按 request.user 取菜单，不接受客户端传入的 user_id
             return $.ajax({
                 url: '/api/get_user_menu/',
-                method: 'GET',
-                data: { user_id: userId }
+                method: 'GET'
             }).then(response => {
                 userPermissions = {
                     roles: response.user_roles || [],
@@ -533,15 +544,15 @@
                 html += `
                     <div class="nav-group">
                         <div class="nav-group-title ${isLocked ? 'locked' : ''}" data-group-index="${groupIndex}" data-locked="${isLocked}">
-                            ${group.group}${isLocked ? ' <i class="fas fa-lock" style="font-size: 0.7rem; margin-left: 4px;"></i>' : ''}
+                            ${escapeHtml(group.group)}${isLocked ? ' <i class="fas fa-lock" style="font-size: 0.7rem; margin-left: 4px;"></i>' : ''}
                         </div>
                         <div class="nav-group-content ${isLocked ? 'collapsed locked' : 'expanded'}">
                 `;
                 group.items.forEach(item => {
                     html += `
-                        <div class="nav-item" data-target="${item.key}" data-url="${item.url}">
-                            <i class="${item.icon}"></i>
-                            <span>${item.title}</span>
+                        <div class="nav-item" data-target="${escapeHtml(item.key)}" data-url="${escapeHtml(item.url)}">
+                            <i class="${escapeHtml(item.icon)}"></i>
+                            <span>${escapeHtml(item.title)}</span>
                         </div>
                     `;
                 });
@@ -590,7 +601,7 @@
         function renderEmptyMenu(message) {
             $('#navLinks').html(`
                 <div style="padding: 18px; color: rgba(255,255,255,0.65); font-size: 0.85rem; line-height: 1.8;">
-                    <i class="fas fa-info-circle"></i> ${message}
+                    <i class="fas fa-info-circle"></i> ${escapeHtml(message)}
                 </div>
             `);
             $('#contentIframe').attr('src', 'about:blank');
@@ -598,17 +609,25 @@
 
         // 加载页面内容
         function loadPage(url, $item) {
+            const safeUrl = safeMenuUrl(url);
+            if (!safeUrl) {
+                showToast('该菜单地址不合法，已阻止加载', 2500);
+                return;
+            }
+
             // 更新导航状态
             $('.nav-item').removeClass('active');
             $item.addClass('active');
             
             // 更新iframe内容
-            $('#contentIframe').attr('src', url);
+            $('#contentIframe').attr('src', safeUrl);
         }
 
         // Toast提示
         function showToast(message, duration = 2000) {
-            const toast = $('<div style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; font-size: 0.9rem;">' + message + '</div>');
+            // 用 text() 写入，避免提示内容里的 HTML 被执行
+            const toast = $('<div style="position: fixed; bottom: 20px; right: 20px; background: rgba(0,0,0,0.8); color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; font-size: 0.9rem;"></div>')
+                .text(message);
             $('body').append(toast);
             toast.fadeIn(300);
             setTimeout(() => {
@@ -656,7 +675,11 @@
                     try {
                         // 获取iframe内部的document
                         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
-                        // 为iframe内部添加点击事件监听器
+                        // 同一个 document 只绑定一次，避免重复触发
+                        if (iframeDoc.__clickBound) {
+                            return;
+                        }
+                        iframeDoc.__clickBound = true;
                         iframeDoc.addEventListener('click', function() {
                             hideUserDropdown();
                         });
