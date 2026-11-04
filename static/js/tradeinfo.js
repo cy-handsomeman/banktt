@@ -1,5 +1,4 @@
 let currentList = [];
-let isApiAvailable = true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -9,29 +8,32 @@ let paginationInfo = {
 
 const API_BASE_URL = '/api/trade/';
 
-const generateMockData = () => { return []; };
-
 function renderTable(data) {
     const tbody = $('#dataTableBody');
     if (!data || data.length === 0) {
-        tbody.html('<tr class="empty-row"><td colspan="7">暂无交易数据，请新增或检查网络</td></tr>');
+        tbody.html('<tr class="empty-row"><td colspan="8">暂无交易数据</td></tr>');
         return;
     }
     let html = '';
     data.forEach(item => {
         const transMoney = item.trans_money !== null ? '¥' + parseFloat(item.trans_money).toFixed(2) : '—';
         const transDate = item.trans_date ? item.trans_date.replace('T', ' ').slice(0, 19) : '—';
+        const toCardId = item.to_card_id ? escapeHtml(item.to_card_id) : '—';
+        // 转账的两条流水是成对的，不允许单独修改或删除
+        const isTransferLeg = item.trans_type === '转账转出' || item.trans_type === '转账转入';
+        const actionHtml = isTransferLeg
+            ? '<span class="transfer-locked" title="转账流水不支持修改/删除">—</span>'
+            : `<button class="edit-btn" data-id="${item.tid}" title="编辑"><i class="fas fa-edit"></i></button>
+                <button class="delete-btn" data-id="${item.tid}" title="删除"><i class="fas fa-trash-alt"></i></button>`;
         html += `<tr data-id="${item.tid}">
             <td>${item.tid}</td>
             <td><strong>${escapeHtml(item.trans_type)}</strong></td>
             <td>${escapeHtml(item.card_id)}</td>
+            <td>${toCardId}</td>
             <td>${transDate}</td>
             <td class="money-cell">${transMoney}</td>
             <td>${escapeHtml(item.remark || '—')}</td>
-            <td class="action-buttons">
-                <button class="edit-btn" data-id="${item.tid}" title="编辑"><i class="fas fa-edit"></i></button>
-                <button class="delete-btn" data-id="${item.tid}" title="删除"><i class="fas fa-trash-alt"></i></button>
-            </td>
+            <td class="action-buttons">${actionHtml}</td>
         </tr>`;
     });
     tbody.html(html);
@@ -74,13 +76,12 @@ function fetchList(page = 1) {
         updatePaginationUI(count, paginationInfo.totalPages);
         return data;
     }).catch(error => {
-        console.error("获取数据失败:", error);
-        isApiAvailable = false;
-        currentList = generateMockData();
+        console.error("获取交易列表失败:", error);
+        currentList = [];
         renderTable(currentList);
-        updatePaginationUI(currentList.length, 1);
-        showToast("⚠️ 接口调用失败", 3000);
-        return currentList;
+        updatePaginationUI(0, 1);
+        showToast(parseApiError(error, '获取交易列表失败'), 2500);
+        return null;
     });
 }
 
@@ -178,12 +179,9 @@ function addItem(itemData) {
         fetchList();
         showToast("新增成功", 1500);
     }).catch(err => {
-        console.error("新增失败:", err);
-        isApiAvailable = false;
-        const newId = generateNewId();
-        currentList.push({ tid: newId, ...itemData });
-        renderTable(currentList);
-        showToast("⚠️ 已本地新增", 2000);
+        console.error("新增交易失败:", err);
+        showToast(parseApiError(err, '新增交易失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -197,11 +195,9 @@ function updateItem(id, itemData) {
         fetchList();
         showToast("更新成功", 1500);
     }).catch(err => {
-        console.error("更新失败:", err);
-        isApiAvailable = false;
-        const idx = currentList.findIndex(u => u.tid === id);
-        if (idx !== -1) { currentList[idx] = { ...currentList[idx], ...itemData, tid: id }; renderTable(currentList); }
-        showToast("⚠️ 已本地更新", 2000);
+        console.error("更新交易失败:", err);
+        showToast(parseApiError(err, '更新交易失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -213,16 +209,9 @@ function deleteItem(id) {
         fetchList();
         showToast("删除成功", 1500);
     }).catch(err => {
-        console.error("删除失败:", err);
-        const idx = currentList.findIndex(u => u.tid === id);
-        if (idx !== -1) { currentList.splice(idx, 1); renderTable(currentList); }
-        showToast("⚠️ 已本地删除", 2000);
+        console.error("删除交易失败:", err);
+        showToast(parseApiError(err, '删除交易失败'), 2500);
     });
-}
-
-function generateNewId() {
-    if (!currentList.length) return 1;
-    return Math.max(...currentList.map(u => u.tid)) + 1;
 }
 
 let toastTimer = null;
@@ -243,6 +232,7 @@ function openAddModal() {
     $('#modalTitle').text('新增交易');
     $('#dataForm')[0].reset();
     $('#editId').val('');
+    toggleToCardField();
     $('#dataModal').addClass('active');
 }
 
@@ -252,14 +242,16 @@ function openEditModal(id) {
     currentMode = 'edit';
     $('#modalTitle').text('编辑交易');
     $('#editId').val(item.tid);
-    $('#trans_type').val(item.trans_type);
+    $('#trans_type').val(item.trans_type === '转账转出' ? '转账' : item.trans_type);
     $('#card_id').val(item.card_id);
+    $('#to_card_id').val(item.to_card_id || '');
     if (item.trans_date) {
         const dt = item.trans_date.replace(' ', 'T').slice(0, 16);
         $('#trans_date').val(dt);
     }
     $('#trans_money').val(item.trans_money);
     $('#remark').val(item.remark || '');
+    toggleToCardField();
     $('#dataModal').addClass('active');
 }
 
@@ -268,11 +260,14 @@ function closeModal() { $('#dataModal').removeClass('active'); }
 function onSave() {
     const transType = $('#trans_type').val();
     const cardId = $('#card_id').val().trim();
+    const toCardId = $('#to_card_id').val().trim();
     const transDate = $('#trans_date').val();
     const transMoney = $('#trans_money').val();
     
     if (!transType) { showToast("请选择交易类型", 1500); return; }
     if (!cardId) { showToast("银行卡号不能为空", 1500); return; }
+    if (transType === '转账' && !toCardId) { showToast("转账必须填写收款卡号", 1500); return; }
+    if (transType === '转账' && toCardId === cardId) { showToast("收款卡号不能与付款卡号相同", 1500); return; }
     if (!transDate) { showToast("请选择交易日期", 1500); return; }
     if (!transMoney) { showToast("交易金额不能为空", 1500); return; }
     
@@ -283,12 +278,22 @@ function onSave() {
         trans_money: parseFloat(transMoney),
         remark: $('#remark').val().trim()
     };
+    if (transType === '转账') {
+        payload.to_card_id = toCardId;
+    }
     
     if (currentMode === 'add') {
-        addItem(payload).then(() => closeModal());
+        addItem(payload).then(() => closeModal()).catch(() => {});
     } else {
-        updateItem(parseInt($('#editId').val()), payload).then(() => closeModal());
+        updateItem(parseInt($('#editId').val()), payload).then(() => closeModal()).catch(() => {});
     }
+}
+
+// 转账时才显示收款卡号
+function toggleToCardField() {
+    const isTransfer = $('#trans_type').val() === '转账';
+    $('#toCardGroup').toggle(isTransfer);
+    if (!isTransfer) { $('#to_card_id').val(''); }
 }
 
 function confirmDelete(id) {
@@ -304,7 +309,10 @@ function startAutoRefresh() {
 function handleRefresh() {
     const $btn = $('#refreshBtn');
     $btn.addClass('refreshing');
-    fetchList().then(() => { $btn.removeClass('refreshing'); showToast("数据已刷新", 1500); });
+    fetchList().then(data => {
+        $btn.removeClass('refreshing');
+        if (data) { showToast("数据已刷新", 1500); }
+    });
 }
 
 $(document).ready(function() {
@@ -314,6 +322,7 @@ $(document).ready(function() {
     $('#openAddModalBtn').on('click', openAddModal);
     $('#closeModalBtn, #cancelModalBtn').on('click', closeModal);
     $('#submitBtn').on('click', onSave);
+    $('#trans_type').on('change', toggleToCardField);
     $('#dataModal').on('click', function(e) { if ($(e.target).hasClass('modal-overlay')) closeModal(); });
     $('#dataForm').on('submit', function(e) { e.preventDefault(); return false; });
     

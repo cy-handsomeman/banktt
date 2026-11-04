@@ -1,5 +1,4 @@
 let currentList = [];
-let isApiAvailable = true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -73,10 +72,13 @@ function fetchList(page = 1) {
         renderTable(currentList);
         updatePaginationUI(count, paginationInfo.totalPages);
         return data;
-    }).catch(() => {
-        isApiAvailable = false;
+    }).catch(err => {
+        console.error("获取银行卡列表失败:", err);
+        currentList = [];
         renderTable([]);
-        showToast("⚠️ 接口调用失败", 3000);
+        updatePaginationUI(0, 1);
+        showToast(parseApiError(err, '获取银行卡列表失败'), 2500);
+        return null;
     });
 }
 
@@ -173,11 +175,10 @@ function addItem(payload) {
     }).then(() => {
         fetchList();
         showToast("新增成功", 1500);
-    }).catch(() => {
-        isApiAvailable = false;
-        currentList.push(payload);
-        renderTable(currentList);
-        showToast("⚠️ 已本地新增", 2000);
+    }).catch(err => {
+        console.error("新增银行卡失败:", err);
+        showToast(parseApiError(err, '新增银行卡失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -190,12 +191,10 @@ function updateItem(cardId, payload) {
     }).then(() => {
         fetchList();
         showToast("更新成功", 1500);
-    }).catch(() => {
-        isApiAvailable = false;
-        const idx = currentList.findIndex(u => u.card_id === cardId);
-        if (idx !== -1) { currentList[idx] = { ...currentList[idx], ...payload }; }
-        renderTable(currentList);
-        showToast("⚠️ 已本地更新", 2000);
+    }).catch(err => {
+        console.error("更新银行卡失败:", err);
+        showToast(parseApiError(err, '更新银行卡失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -206,11 +205,9 @@ function deleteItem(cardId) {
     }).then(() => {
         fetchList();
         showToast("删除成功", 1500);
-    }).catch(() => {
-        const idx = currentList.findIndex(u => u.card_id === cardId);
-        if (idx !== -1) { currentList.splice(idx, 1); }
-        renderTable(currentList);
-        showToast("⚠️ 已本地删除", 2000);
+    }).catch(err => {
+        console.error("删除银行卡失败:", err);
+        showToast(parseApiError(err, '删除银行卡失败'), 2500);
     });
 }
 
@@ -288,12 +285,12 @@ function onSave() {
     if (currentMode === 'add') {
         if (!password) { showToast("密码不能为空", 1500); return; }
         payload.password = password;
-        addItem(payload).then(() => closeModal());
+        addItem(payload).then(() => closeModal()).catch(() => {});
     } else {
         if (password) {
             payload.password = password;
         }
-        updateItem($('#editCardId').val(), payload).then(() => closeModal());
+        updateItem($('#editCardId').val(), payload).then(() => closeModal()).catch(() => {});
     }
 }
 

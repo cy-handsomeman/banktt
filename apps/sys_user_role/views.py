@@ -7,19 +7,78 @@ from apps.sys_user_role.models import SysUserRole
 from apps.sys_user_role.serializers import SysUserRoleSerializer
 from apps.sys_role_menu.models import SysRoleMenu
 from apps.sys_menu.models import SysMenu
-from apps.sys_user.permissions import IsSuperAdminOrReadOnly
+from apps.sys_role.models import SysRole
+from apps.sys_user.permissions import (
+    IsSuperAdmin,
+    SUPER_ADMIN_ROLE_ID,
+    user_role_ids,
+)
 
 
 def sys_user_role_list(request):
     return render(request, 'sys_user_role.html')
 
 
-# 角色ID到角色名称的映射
-ROLE_NAME_MAP = {
-    1: '超级管理员',
-    2: '大堂经理',
-    3: '普通柜员'
+# 菜单展示配置：只负责图标和分组归属，菜单本身（名称/地址/排序）以 sys_menu 表为准
+MENU_PRESENTATION = {
+    '/user/': {'icon': 'fas fa-users', 'group': '业务管理'},
+    '/card/': {'icon': 'fas fa-credit-card', 'group': '业务管理'},
+    '/trade/': {'icon': 'fas fa-exchange-alt', 'group': '业务管理'},
+    '/sys_user/': {'icon': 'fas fa-user-circle', 'group': '权限管理'},
+    '/role/': {'icon': 'fas fa-shield-alt', 'group': '权限管理'},
+    '/user_role/': {'icon': 'fas fa-user-shield', 'group': '权限管理'},
 }
+GROUP_ORDER = ['业务管理', '权限管理']
+DEFAULT_GROUP = '其他'
+DEFAULT_ICON = 'fas fa-circle'
+
+
+def _normalize_url(url):
+    url = (url or '').strip()
+    if not url:
+        return '/'
+    if not url.startswith('/'):
+        url = '/' + url
+    if not url.endswith('/'):
+        url += '/'
+    return url
+
+
+def _menu_key(url):
+    return _normalize_url(url).strip('/').replace('/', '_')
+
+
+def _build_menu(menus):
+    """按 sys_menu 表构建前端导航，分组与图标来自 MENU_PRESENTATION"""
+    groups = {}
+    for menu in menus:
+        url = _normalize_url(menu.menu_url)
+        presentation = MENU_PRESENTATION.get(url, {})
+        group_name = presentation.get('group', DEFAULT_GROUP)
+        groups.setdefault(group_name, []).append({
+            'key': _menu_key(url),
+            'title': menu.menu_name,
+            'icon': presentation.get('icon', DEFAULT_ICON),
+            'url': url,
+            'order': menu.sort_order or 0,
+            'menu_id': menu.menu_id,
+        })
+
+    for items in groups.values():
+        items.sort(key=lambda item: (item['order'], item['menu_id']))
+
+    ordered_group_names = GROUP_ORDER + sorted(
+        name for name in groups if name not in GROUP_ORDER
+    )
+    user_menu = []
+    for group_name in ordered_group_names:
+        if groups.get(group_name):
+            user_menu.append({
+                'group': group_name,
+                'items': groups[group_name],
+                'locked': False,
+            })
+    return user_menu
 
 
 @api_view(['GET'])
@@ -28,11 +87,8 @@ def check_super_admin(request):
     检查当前登录用户是否是超级管理员
     GET /api/check_super_admin/
     """
-    user_roles = list(
-        SysUserRole.objects.filter(user_id=request.user.pk).values_list('role_id', flat=True)
-    )
     return Response(
-        {'is_super_admin': 1 in user_roles},
+        {'is_super_admin': SUPER_ADMIN_ROLE_ID in user_role_ids(request.user)},
         status=status.HTTP_200_OK
     )
 
@@ -40,142 +96,45 @@ def check_super_admin(request):
 @api_view(['GET'])
 def get_user_menu(request):
     """
-    获取当前登录用户有权限访问的菜单列表
+    获取当前登录用户有权限访问的菜单列表（完全由 sys_menu + sys_role_menu 驱动）
     GET /api/get_user_menu/
     """
     user_id = request.user.pk
+    user_roles = sorted(user_role_ids(request.user))
+    is_super_admin = SUPER_ADMIN_ROLE_ID in user_roles
 
-    # 获取用户角色
-    user_roles = list(
-        SysUserRole.objects.filter(user_id=user_id).values_list('role_id', flat=True)
-    )
-    
-    # 判断是否为超级管理员
-    is_super_admin = 1 in user_roles  # 角色ID为1的是超级管理员
-    
-    # 如果是超级管理员，拥有所有权限
     if is_super_admin:
-        allowed_pages = ['user_info', 'card_info', 'trade_info', 'sys_user', 'sys_role', 'sys_user_role']
+        menus = SysMenu.objects.all()
     else:
-        # 从sys_role_menu表获取角色分配的菜单权限
-        menu_ids = SysRoleMenu.objects.filter(role_id__in=user_roles).values_list('menu_id', flat=True)
-        
-        # 获取菜单的URL标识（menu_url去掉前缀和后缀）
-        allowed_pages = []
-        for menu in SysMenu.objects.filter(menu_id__in=menu_ids):
-            # 从URL中提取页面标识，如 '/user/' -> 'user'
-            url = menu.menu_url.strip('/')
-            if url == 'user':
-                allowed_pages.append('user_info')  # 客户管理
-            elif url == 'card':
-                allowed_pages.append('card_info')  # 银行卡管理
-            elif url == 'trade':
-                allowed_pages.append('trade_info')  # 交易管理
-            elif url == 'sys_user':
-                allowed_pages.append('sys_user')  # 系统用户
-            elif url == 'role':
-                allowed_pages.append('sys_role')  # 角色管理
-            elif url == 'user_role':
-                allowed_pages.append('sys_user_role')  # 用户角色关联
-    
-    # 菜单配置及固定顺序
-    menu_config = {
-        'user_info': {
-            'title': '客户管理',
-            'icon': 'fas fa-users',
-            'url': '/user/',
-            'group': '业务管理',
-            'order': 1
-        },
-        'card_info': {
-            'title': '银行卡管理',
-            'icon': 'fas fa-credit-card',
-            'url': '/card/',
-            'group': '业务管理',
-            'order': 2
-        },
-        'trade_info': {
-            'title': '交易管理',
-            'icon': 'fas fa-exchange-alt',
-            'url': '/trade/',
-            'group': '业务管理',
-            'order': 3
-        },
-        'sys_user': {
-            'title': '系统用户',
-            'icon': 'fas fa-user-circle',
-            'url': '/sys_user/',
-            'group': '权限管理',
-            'order': 1
-        },
-        'sys_role': {
-            'title': '角色管理',
-            'icon': 'fas fa-shield-alt',
-            'url': '/role/',
-            'group': '权限管理',
-            'order': 2
-        },
-        'sys_user_role': {
-            'title': '用户角色关联',
-            'icon': 'fas fa-user-shield',
-            'url': '/user_role/',
-            'group': '权限管理',
-            'order': 3
-        }
-    }
-    
-    # 构建用户菜单
-    user_menu = []
-    groups = {}
-    
-    for page_key in allowed_pages:
-        if page_key in menu_config:
-            config = menu_config[page_key]
-            group_name = config['group']
-            if group_name not in groups:
-                groups[group_name] = []
-            groups[group_name].append({
-                'key': page_key,
-                'title': config['title'],
-                'icon': config['icon'],
-                'url': config['url'],
-                'order': config['order']
-            })
-    
-    # 对每个分组的菜单项按order排序
-    for group_name in groups:
-        groups[group_name].sort(key=lambda x: x['order'])
-    
-    # 转换为有序列表
-    group_order = ['业务管理', '权限管理']
-    for group_name in group_order:
-        if group_name in groups:
-            # 如果分组没有任何菜单项，则不显示该分组
-            if len(groups[group_name]) > 0:
-                user_menu.append({
-                    'group': group_name,
-                    'items': groups[group_name],
-                    'locked': False
-                })
-    
-    # 获取角色名称列表
-    role_names = [ROLE_NAME_MAP.get(role_id, f'未知角色({role_id})') for role_id in user_roles]
+        menu_ids = set(
+            SysRoleMenu.objects.filter(role_id__in=user_roles).values_list('menu_id', flat=True)
+        )
+        menus = SysMenu.objects.filter(menu_id__in=menu_ids)
+
+    menus = list(menus.order_by('sort_order', 'menu_id'))
+    user_menu = _build_menu(menus)
+
+    # 角色名称直接从 sys_role 表读取，避免代码里维护一份容易过期的映射
+    role_name_map = dict(
+        SysRole.objects.filter(role_id__in=user_roles).values_list('role_id', 'role_name')
+    )
+    role_names = [role_name_map.get(role_id, f'未知角色({role_id})') for role_id in user_roles]
     role_names_str = ', '.join(role_names) if role_names else '无角色'
-    
+
     return Response({
         'user_id': user_id,
         'user_roles': user_roles,
         'role_names': role_names,
         'role_names_str': role_names_str,
         'is_super_admin': is_super_admin,
-        'menu': user_menu
+        'menu': user_menu,
     })
 
 
 class SysUserRoleViewSet(viewsets.ModelViewSet):
     queryset = SysUserRole.objects.all().order_by('user_id', 'role_id')
     serializer_class = SysUserRoleSerializer
-    permission_classes = [IsSuperAdminOrReadOnly]
+    permission_classes = [IsSuperAdmin]
     filterset_fields = ['user_id', 'role_id']
 
     @action(detail=False, methods=['get'], url_path='user/(?P<user_id>[^/.]+)')

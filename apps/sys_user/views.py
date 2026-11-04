@@ -1,13 +1,16 @@
 from django.shortcuts import render
 from django.contrib.auth.hashers import check_password
+from django.db import transaction
 from rest_framework import viewsets, status  # 需要添加 status
+from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response  # 需要添加 Response
 from rest_framework.decorators import action
 from rest_framework_simplejwt.tokens import RefreshToken
 from apps.sys_user.models import SysUser
 from apps.sys_user.serializers import SysUserSerializer
-from apps.sys_user.permissions import IsSuperAdminOrReadOnly
+from apps.sys_user.permissions import IsSuperAdmin
+from apps.sys_user_role.models import SysUserRole
 
 
 def sys_user_list(request):
@@ -18,9 +21,21 @@ def sys_user_list(request):
 class SysUserViewSet(viewsets.ModelViewSet):
     queryset = SysUser.objects.all().order_by('create_time')
     serializer_class = SysUserSerializer
-    permission_classes = [IsSuperAdminOrReadOnly]
+    permission_classes = [IsSuperAdmin]
     filterset_fields = ['user_id', 'user_name', 'mobile', 'pid']
     search_fields = ['user_name', 'mobile', 'pid', 'email', 'address']
+
+    def perform_destroy(self, instance):
+        # 不能删除自己，也不能在还绑定角色时直接删除账号
+        if instance.pk == self.request.user.pk:
+            raise ValidationError({'detail': '不能删除当前登录的账号'})
+        role_count = SysUserRole.objects.filter(user_id=instance.user_id).count()
+        if role_count:
+            raise ValidationError(
+                {'detail': f'账号「{instance.user_name}」还绑定了 {role_count} 个角色，请先解除角色绑定'}
+            )
+        with transaction.atomic():
+            instance.delete()
     
     @action(
         detail=False,

@@ -1,5 +1,4 @@
 let currentList = [];
-let isApiAvailable = true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -62,10 +61,13 @@ function fetchList(page = 1) {
         renderTable(currentList);
         updatePaginationUI(count, paginationInfo.totalPages);
         return data;
-    }).catch(() => {
-        isApiAvailable = false;
+    }).catch(err => {
+        console.error("获取用户角色关联失败:", err);
+        currentList = [];
         renderTable([]);
-        showToast("⚠️ 接口调用失败", 3000);
+        updatePaginationUI(0, 1);
+        showToast(parseApiError(err, '获取用户角色关联失败'), 2500);
+        return null;
     });
 }
 
@@ -162,8 +164,10 @@ function addItem(payload) {
     }).then(() => {
         fetchList();
         showToast("新增成功", 1500);
-    }).catch(() => {
-        showToast("⚠️ 请输入正确的角色ID和用户ID", 2000);
+    }).catch(err => {
+        console.error("新增用户角色关联失败:", err);
+        showToast(parseApiError(err, '新增用户角色关联失败，请检查用户ID和角色ID'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -174,11 +178,9 @@ function deleteItem(id) {
     }).then(() => {
         fetchList();
         showToast("删除成功", 1500);
-    }).catch(() => {
-        const idx = currentList.findIndex(u => u.id === id);
-        if (idx !== -1) { currentList.splice(idx, 1); }
-        renderTable(currentList);
-        showToast("⚠️ 已本地删除", 2000);
+    }).catch(err => {
+        console.error("删除用户角色关联失败:", err);
+        showToast(parseApiError(err, '删除用户角色关联失败'), 2500);
     });
 }
 
@@ -191,8 +193,10 @@ function batchRemoveRoles(userIds, roleId) {
     }).then(response => {
         fetchList();
         showToast(response.message || "批量移除成功", 1500);
-    }).catch(() => {
-        showToast("⚠️ 批量移除失败", 2000);
+    }).catch(err => {
+        console.error("批量移除用户角色失败:", err);
+        showToast(parseApiError(err, '批量移除用户角色失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -233,7 +237,7 @@ function onSave() {
     if (!roleId) { showToast("角色ID不能为空", 1500); return; }
 
     const payload = { user_id: userId, role_id: roleId };
-    addItem(payload).then(() => closeModal());
+    addItem(payload).then(() => closeModal()).catch(() => {});
 }
 
 function onBatchRemove() {

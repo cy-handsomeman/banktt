@@ -21,11 +21,11 @@
         <table class="data-table" id="dataTable">
             <thead>
                 <tr>
-                    <th>交易ID</th><th>交易类型</th><th>银行卡号</th><th>交易日期</th><th>交易金额</th><th>备注</th><th width="100">操作</th>
+                    <th>交易ID</th><th>交易类型</th><th>银行卡号</th><th>对方卡号</th><th>交易日期</th><th>交易金额</th><th>备注</th><th width="100">操作</th>
                 </tr>
             </thead>
             <tbody id="dataTableBody">
-                <tr class="empty-row"><td colspan="7">加载中...</td></tr>
+                <tr class="empty-row"><td colspan="8">加载中...</td></tr>
             </tbody>
         </table>
     </div>
@@ -67,6 +67,10 @@
                 <div class="form-group">
                     <label>银行卡号 <span style="color:#e03a3a;">*</span></label>
                     <input type="text" id="card_id" placeholder="请输入银行卡号" maxlength="20">
+                </div>
+                <div class="form-group" id="toCardGroup" style="display: none;">
+                    <label>收款卡号 <span style="color:#e03a3a;">*</span></label>
+                    <input type="text" id="to_card_id" placeholder="转账时填写收款银行卡号" maxlength="20">
                 </div>
                 <div class="form-row">
                     <div class="form-group">

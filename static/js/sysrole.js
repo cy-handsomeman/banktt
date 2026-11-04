@@ -1,5 +1,4 @@
 let currentList = [];
-let isApiAvailable = true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -10,14 +9,8 @@ const API_BASE_URL = '/api/role/';
 const MENU_API_URL = '/api/menu/';
 const ROLE_MENU_API_URL = '/api/role_menu/';
 
-const menuList = [
-    { menu_id: 1, menu_name: '客户管理', parent_id: 0, type: 'business' },
-    { menu_id: 2, menu_name: '银行卡管理', parent_id: 0, type: 'business' },
-    { menu_id: 3, menu_name: '交易管理', parent_id: 0, type: 'business' },
-    { menu_id: 4, menu_name: '系统用户', parent_id: 0, type: 'permission' },
-    { menu_id: 5, menu_name: '角色管理', parent_id: 0, type: 'permission' },
-    { menu_id: 6, menu_name: '用户角色关联', parent_id: 0, type: 'permission' }
-];
+// 菜单由后台 sys_menu 表提供，前端不再硬编码
+let menuList = [];
 
 function renderTable(data) {
     const tbody = $('#dataTableBody');
@@ -80,11 +73,22 @@ function fetchList(page = 1) {
         renderTable(currentList);
         updatePaginationUI(count, paginationInfo.totalPages);
         return data;
-    }).catch(() => {
-        isApiAvailable = false;
+    }).catch(err => {
+        console.error("获取角色列表失败:", err);
+        currentList = [];
         renderTable([]);
-        showToast("⚠️ 接口调用失败", 3000);
+        updatePaginationUI(0, 1);
+        showToast(parseApiError(err, '获取角色列表失败'), 2500);
+        return null;
     });
+}
+
+// 把分页/非分页响应统一成数组
+function normalizeList(resp) {
+    if (Array.isArray(resp)) return resp;
+    if (resp && Array.isArray(resp.results)) return resp.results;
+    if (resp && Array.isArray(resp.data)) return resp.data;
+    return [];
 }
 
 function updatePaginationUI(totalCount, totalPages) {
@@ -180,12 +184,10 @@ function addItem(payload) {
     }).then(() => {
         fetchList();
         showToast("新增成功", 1500);
-    }).catch(() => {
-        isApiAvailable = false;
-        const newId = currentList.length ? Math.max(...currentList.map(u => u.role_id)) + 1 : 1;
-        currentList.push({ role_id: newId, ...payload });
-        renderTable(currentList);
-        showToast("⚠️ 已本地新增", 2000);
+    }).catch(err => {
+        console.error("新增角色失败:", err);
+        showToast(parseApiError(err, '新增角色失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -198,12 +200,10 @@ function updateItem(id, payload) {
     }).then(() => {
         fetchList();
         showToast("更新成功", 1500);
-    }).catch(() => {
-        isApiAvailable = false;
-        const idx = currentList.findIndex(u => u.role_id === id);
-        if (idx !== -1) { currentList[idx] = { ...currentList[idx], ...payload, role_id: id }; }
-        renderTable(currentList);
-        showToast("⚠️ 已本地更新", 2000);
+    }).catch(err => {
+        console.error("更新角色失败:", err);
+        showToast(parseApiError(err, '更新角色失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -214,11 +214,9 @@ function deleteItem(id) {
     }).then(() => {
         fetchList();
         showToast("删除成功", 1500);
-    }).catch(() => {
-        const idx = currentList.findIndex(u => u.role_id === id);
-        if (idx !== -1) { currentList.splice(idx, 1); }
-        renderTable(currentList);
-        showToast("⚠️ 删除失败，请检查是否有用户已分配该角色", 2000);
+    }).catch(err => {
+        console.error("删除角色失败:", err);
+        showToast(parseApiError(err, '删除角色失败'), 2500);
     });
 }
 
@@ -266,9 +264,9 @@ function onSave() {
     };
 
     if (currentMode === 'add') {
-        addItem(payload).then(() => closeModal());
+        addItem(payload).then(() => closeModal()).catch(() => {});
     } else {
-        updateItem(parseInt($('#editId').val()), payload).then(() => closeModal());
+        updateItem(parseInt($('#editId').val()), payload).then(() => closeModal()).catch(() => {});
     }
 }
 
@@ -277,36 +275,11 @@ function confirmDelete(id) {
 }
 
 function openMenuModal(roleId) {
-    const userId = sessionStorage.getItem('user_id');
-    
-    // 未登录/无角色时，和超级管理员一样可以使用此功能
-    if (!userId) {
-        $('#menuRoleId').val(roleId);
-        const roleName = currentList.find(r => r.role_id === roleId)?.role_name || '';
-        $('#menuModalTitle').text(`分配菜单权限 - ${roleName}`);
-        loadMenuItems(roleId);
-        $('#menuModal').addClass('active');
-        return;
-    }
-    
-    $.ajax({
-        url: '/api/check_super_admin/',
-        method: 'GET',
-        data: { user_id: userId },
-        timeout: 3000
-    }).then(response => {
-        if (response.is_super_admin) {
-            $('#menuRoleId').val(roleId);
-            const roleName = currentList.find(r => r.role_id === roleId)?.role_name || '';
-            $('#menuModalTitle').text(`分配菜单权限 - ${roleName}`);
-            loadMenuItems(roleId);
-            $('#menuModal').addClass('active');
-        } else {
-            showToast("你目前无权限使用此功能", 2000);
-        }
-    }).catch(() => {
-        showToast("你目前无权限使用此功能", 2000);
-    });
+    const roleName = currentList.find(r => r.role_id === roleId)?.role_name || '';
+    $('#menuRoleId').val(roleId);
+    $('#menuModalTitle').text(`分配菜单权限 - ${roleName}`);
+    loadMenuItems(roleId);
+    $('#menuModal').addClass('active');
 }
 
 function closeMenuModal() {
@@ -314,26 +287,30 @@ function closeMenuModal() {
 }
 
 function loadMenuItems(roleId) {
-    $.ajax({
-        url: `${ROLE_MENU_API_URL}?role_id=${roleId}`,
-        method: 'GET',
-        timeout: 5000
-    }).then(response => {
-        let assignedMenuIds = [];
-        if (Array.isArray(response)) {
-            assignedMenuIds = response.map(item => item.menu_id);
-        } else if (response.results) {
-            assignedMenuIds = response.results.map(item => item.menu_id);
-        }
+    $.when(
+        $.ajax({ url: MENU_API_URL, method: 'GET', timeout: 5000 }),
+        $.ajax({ url: `${ROLE_MENU_API_URL}?role_id=${roleId}`, method: 'GET', timeout: 5000 })
+    ).then((menuResp, roleMenuResp) => {
+        menuList = normalizeList(menuResp[0]);
+        const assignedMenuIds = normalizeList(roleMenuResp[0]).map(item => item.menu_id);
         renderMenuItems(assignedMenuIds);
-    }).catch(() => {
+    }).catch(err => {
+        console.error("加载菜单失败:", err);
+        showToast(parseApiError(err, '加载菜单失败'), 2500);
+        menuList = [];
         renderMenuItems([]);
     });
 }
 
+// 权限类菜单：系统用户/角色/用户角色关联；其余归入业务管理
+function isPermissionMenu(menu) {
+    const url = (menu.menu_url || '').replace(/\/+$/, '/');
+    return ['/sys_user/', '/role/', '/user_role/'].includes(url);
+}
+
 function renderMenuItems(assignedMenuIds) {
-    const businessMenus = menuList.filter(m => m.type === 'business');
-    const permissionMenus = menuList.filter(m => m.type === 'permission');
+    const businessMenus = menuList.filter(m => !isPermissionMenu(m));
+    const permissionMenus = menuList.filter(m => isPermissionMenu(m));
     
     let businessHtml = '';
     businessMenus.forEach(menu => {

@@ -1,6 +1,5 @@
 // ---------- 全局变量 ----------
-let currentUserList = [];       // 存储当前显示的用户列表（用于前端快速渲染，以及接口失败时使用测试数据）
-let isApiAvailable = true;      // 标记接口是否可用（一旦调用失败，后续使用测试数据模式）
+let currentUserList = [];       // 存储当前显示的用户列表
 let paginationInfo = {          // 分页信息
     currentPage: 1,
     pageSize: 10,
@@ -10,11 +9,6 @@ let paginationInfo = {          // 分页信息
 
 // ---------- API 基础配置 ----------
 const API_BASE_URL = '/api/sys_user/';   // 正确的API地址，支持 GET, POST, PUT, DELETE
-
-// 模拟测试数据
-const generateMockUsers = () => {
-    return [];
-};
 
 // ---------- 工具函数：渲染表格 ----------
 function renderUserTable(users) {
@@ -75,16 +69,8 @@ function escapeHtml(str) {
     });
 }
 
-// ---------- API 请求封装 (带错误降级) ----------
+// ---------- API 请求封装 ----------
 function fetchUserList(page = 1) {
-    if (!isApiAvailable) {
-        console.log("接口已标记不可用，使用测试数据展示");
-        currentUserList = generateMockUsers();
-        renderUserTable(currentUserList);
-        updatePaginationUI(currentUserList.length, 1);
-        return Promise.resolve(currentUserList);
-    }
-    
     return $.ajax({
         url: `${API_BASE_URL}?page=${page}&page_size=${paginationInfo.pageSize}`,
         method: 'GET',
@@ -113,15 +99,13 @@ function fetchUserList(page = 1) {
         renderUserTable(currentUserList);
         updatePaginationUI(count, paginationInfo.totalPages);
         return users;
-    }).catch(error => {
-        console.error("调用API获取用户列表失败:", error);
-        isApiAvailable = false;
-        const mockData = generateMockUsers();
-        currentUserList = mockData;
-        renderUserTable(mockData);
-        updatePaginationUI(mockData.length, 1);
-        showToast("⚠️ 接口调用失败，当前使用测试数据模式", 3000);
-        return mockData;
+    }).catch(err => {
+        console.error("获取系统用户列表失败:", err);
+        currentUserList = [];
+        renderUserTable(currentUserList);
+        updatePaginationUI(0, 1);
+        showToast(parseApiError(err, '获取系统用户列表失败'), 2500);
+        return null;
     });
 }
 
@@ -212,24 +196,6 @@ function goToLastPage() {
 
 // 新增用户 (POST)
 function addUser(userData) {
-    if (!isApiAvailable) {
-        const newId = generateNewIdFromMock();
-        const newUser = {
-            user_id: newId,
-            user_name: userData.user_name,
-            pid: userData.pid ? parseInt(userData.pid) : null,
-            email: userData.email || '',
-            mobile: userData.mobile || '',
-            address: userData.address || '',
-            password: userData.password || '******',
-            create_time: new Date().toISOString().slice(0,19).replace('T', ' ')
-        };
-        currentUserList.push(newUser);
-        renderUserTable(currentUserList);
-        showToast("✅ 新增成功 (测试模式)", 2000);
-        return Promise.resolve(newUser);
-    }
-    
     return $.ajax({
         url: API_BASE_URL,
         method: 'POST',
@@ -241,23 +207,9 @@ function addUser(userData) {
         showToast("新增用户成功", 1500);
         return newUser;
     }).catch(err => {
-        console.error("新增接口失败，切换至测试模式并新增", err);
-        isApiAvailable = false;
-        const newId = generateNewIdFromMock();
-        const fallbackUser = {
-            user_id: newId,
-            user_name: userData.user_name,
-            pid: userData.pid ? parseInt(userData.pid) : null,
-            email: userData.email || '',
-            mobile: userData.mobile || '',
-            address: userData.address || '',
-            password: userData.password || '******',
-            create_time: new Date().toISOString().slice(0,19).replace('T', ' ')
-        };
-        currentUserList.push(fallbackUser);
-        renderUserTable(currentUserList);
-        showToast("⚠️ 接口失效，已在本地测试数据中添加", 2500);
-        return fallbackUser;
+        console.error("新增系统用户失败:", err);
+        showToast(parseApiError(err, '新增系统用户失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -272,19 +224,9 @@ function updateUser(userId, userData) {
         fetchUserList();
         showToast("用户信息更新成功", 1500);
     }).catch(err => {
-        console.error("更新接口失败，降级本地修改", err);
-        isApiAvailable = false;
-        const index = currentUserList.findIndex(u => u.user_id === userId);
-        if (index !== -1) {
-            currentUserList[index] = { ...currentUserList[index], ...userData, user_id: userId };
-            const originalIndex = originalUserList.findIndex(u => u.user_id === userId);
-            if (originalIndex !== -1) {
-                originalUserList[originalIndex] = { ...originalUserList[originalIndex], ...userData, user_id: userId };
-            }
-            renderUserTable(currentUserList);
-            showToast("⚠️ 接口失败，已在本地数据中更新", 2000);
-        }
-        return Promise.resolve();
+        console.error("更新系统用户失败:", err);
+        showToast(parseApiError(err, '更新系统用户失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -297,22 +239,9 @@ function deleteUser(userId) {
         fetchUserList();
         showToast("删除成功", 1500);
     }).catch(err => {
-        console.error("删除接口失败:", err);
-        const idx = currentUserList.findIndex(u => u.user_id === userId);
-        if (idx !== -1) {
-            currentUserList.splice(idx, 1);
-            renderUserTable(currentUserList);
-            showToast("⚠️ 接口不可用，已本地删除", 2000);
-        }
-        return Promise.resolve();
+        console.error("删除系统用户失败:", err);
+        showToast(parseApiError(err, '删除系统用户失败'), 2500);
     });
-}
-
-// 辅助：生成模拟新ID
-function generateNewIdFromMock() {
-    if (!currentUserList.length) return 2001;
-    const maxId = Math.max(...currentUserList.map(u => u.user_id));
-    return maxId + 1;
 }
 
 // 简易toast
@@ -384,14 +313,10 @@ function fetchRoleList() {
             roleList = [];
         }
         return roleList;
-    }).catch(error => {
-        console.error("获取角色列表失败:", error);
-        roleList = [
-            { role_id: 1, role_name: '超级管理员', role_code: 'admin' },
-            { role_id: 2, role_name: '大堂经理', role_code: 'manager' },
-            { role_id: 3, role_name: '普通柜员', role_code: 'teller' }
-        ];
-        showToast("⚠️ 获取角色失败，使用默认角色列表", 2500);
+    }).catch(err => {
+        console.error("获取角色列表失败:", err);
+        roleList = [];
+        showToast(parseApiError(err, '获取角色列表失败'), 2500);
         return roleList;
     });
 }
@@ -424,19 +349,10 @@ function renderRoleOptions(userId = null) {
                 `;
             });
             container.html(htmlStr);
-        }).catch(() => {
-            let htmlStr = '';
-            roleList.forEach(role => {
-                const roleId = role.role_id || role.id || role.id_field;
-                const roleName = role.role_name || role.name || '未知角色';
-                htmlStr += `
-                    <label class="role-option">
-                        <input type="checkbox" name="role" value="${roleId}">
-                        <span>${roleName}</span>
-                    </label>
-                `;
-            });
-            container.html(htmlStr);
+        }).catch(err => {
+            console.error("获取用户角色失败:", err);
+            showToast(parseApiError(err, '获取用户角色失败'), 2500);
+            container.html('<div style="text-align: center; color: #e03a3a; padding: 20px;">加载失败，请稍后重试</div>');
         });
     } else {
         let htmlStr = '';
@@ -493,7 +409,9 @@ function submitRoleConfig() {
         const rolesToAdd = selectedRoleIds.filter(rId => !currentRoleIds.includes(rId));
         const rolesToRemove = currentRoleIds.filter(rId => !selectedRoleIds.includes(rId));
         
-        let successCount = 0;
+        let doneCount = 0;
+        let failCount = 0;
+        let firstError = null;
         let totalOperations = rolesToAdd.length + rolesToRemove.length;
         
         if (totalOperations === 0) {
@@ -501,6 +419,20 @@ function submitRoleConfig() {
             showToast("角色配置未变化", 1500);
             return;
         }
+        
+        function checkComplete() {
+            if (doneCount + failCount !== totalOperations) { return; }
+            if (failCount === 0) {
+                closeRoleConfigModal();
+                showToast("角色配置成功", 1500);
+            } else {
+                showToast(parseApiError(firstError, `${failCount} 项角色配置失败`), 2500);
+            }
+            fetchUserList();
+        }
+        
+        function onSuccess() { doneCount++; checkComplete(); }
+        function onFail(err) { failCount++; if (!firstError) firstError = err; checkComplete(); }
         
         rolesToRemove.forEach(roleId => {
             $.ajax({
@@ -511,13 +443,7 @@ function submitRoleConfig() {
                     user_ids: [parseInt(userId)],
                     role_id: roleId
                 })
-            }).then(() => {
-                successCount++;
-                checkComplete();
-            }).catch(() => {
-                successCount++;
-                checkComplete();
-            });
+            }).then(onSuccess).catch(onFail);
         });
         
         rolesToAdd.forEach(roleId => {
@@ -529,21 +455,8 @@ function submitRoleConfig() {
                     user_id: parseInt(userId),
                     role_id: roleId
                 })
-            }).then(() => {
-                successCount++;
-                checkComplete();
-            }).catch(() => {
-                successCount++;
-                checkComplete();
-            });
+            }).then(onSuccess).catch(onFail);
         });
-        
-        function checkComplete() {
-            if (successCount === totalOperations) {
-                closeRoleConfigModal();
-                showToast("角色配置成功", 1500);
-            }
-        }
     }).catch(err => {
         console.error("获取用户角色失败:", err);
         showToast("配置角色失败", 2000);
@@ -567,7 +480,8 @@ function onSaveUser() {
         showToast("身份证号不能为空", 1500);
         return;
     }
-    const pid = parseInt(pidRaw);
+    // 身份证号按字符串提交，避免 18 位数字被 JS 转成 Number 后丢失精度
+    const pid = pidRaw.trim();
     const mobile = $('#mobile').val().trim();
     if (!mobile) {
         showToast("手机号不能为空", 1500);
@@ -580,18 +494,17 @@ function onSaveUser() {
         mobile: $('#mobile').val().trim(),
         address: $('#address').val().trim(),
         password: passwordVal || undefined,
-        remarks: $('#remarks').val().trim(),
     };
     if (currentModalMode === 'add') {
         addUser(payload).then(() => {
             closeModal();
-        }).catch(() => { closeModal(); });
+        }).catch(() => {});
     } else {
         const editId = parseInt($('#editUserId').val());
         if (!payload.password) delete payload.password;
         updateUser(editId, payload).then(() => {
             closeModal();
-        }).catch(() => { closeModal(); });
+        }).catch(() => {});
     }
 }
 
@@ -651,11 +564,9 @@ function handleRefresh() {
     $btn.addClass('refreshing');
     paginationInfo.currentPage = 1;
     $('#searchInput').val('');
-    fetchUserList(1).then(() => {
+    fetchUserList(1).then(data => {
         $btn.removeClass('refreshing');
-        showToast("数据已刷新", 1500);
-    }).catch(() => {
-        $btn.removeClass('refreshing');
+        if (data) { showToast("数据已刷新", 1500); }
     });
 }
 

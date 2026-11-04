@@ -6,13 +6,13 @@ from apps.sys_role_menu.models import SysRoleMenu
 from apps.sys_role_menu.serializers import SysRoleMenuSerializer
 from apps.sys_role.models import SysRole
 from apps.sys_menu.models import SysMenu
-from apps.sys_user.permissions import IsSuperAdminOrReadOnly
+from apps.sys_user.permissions import IsSuperAdmin
 
 
 class SysRoleMenuViewSet(viewsets.ModelViewSet):
     queryset = SysRoleMenu.objects.all().order_by('role_id', 'menu_id')
     serializer_class = SysRoleMenuSerializer
-    permission_classes = [IsSuperAdminOrReadOnly]
+    permission_classes = [IsSuperAdmin]
     filterset_fields = ['role_id', 'menu_id']
 
     def get_queryset(self):

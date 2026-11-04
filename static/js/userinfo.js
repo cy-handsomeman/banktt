@@ -1,5 +1,4 @@
 let currentUserList = [];
-let isApiAvailable = true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -8,10 +7,6 @@ let paginationInfo = {
 };
 
 const API_BASE_URL = '/api/user/';
-
-const generateMockUsers = () => {
-    return [];
-};
 
 function renderUserTable(users) {
     const tbody = $('#userTableBody');
@@ -58,14 +53,6 @@ function escapeHtml(str) {
 }
 
 function fetchUserList(page = 1) {
-    if (!isApiAvailable) {
-        console.log("接口已标记不可用，使用测试数据展示");
-        currentUserList = generateMockUsers();
-        renderUserTable(currentUserList);
-        updatePaginationUI(currentUserList.length, 1);
-        return Promise.resolve(currentUserList);
-    }
-    
     return $.ajax({
         url: `${API_BASE_URL}?page=${page}&page_size=${paginationInfo.pageSize}`,
         method: 'GET',
@@ -96,15 +83,13 @@ function fetchUserList(page = 1) {
         renderUserTable(currentUserList);
         updatePaginationUI(count, paginationInfo.totalPages);
         return users;
-    }).catch(error => {
-        console.error("调用API获取客户列表失败:", error);
-        isApiAvailable = false;
-        const mockData = generateMockUsers();
-        currentUserList = mockData;
-        renderUserTable(mockData);
-        updatePaginationUI(mockData.length, 1);
-        showToast("⚠️ 接口调用失败，当前使用测试数据模式", 3000);
-        return mockData;
+    }).catch(err => {
+        console.error("获取客户列表失败:", err);
+        currentUserList = [];
+        renderUserTable(currentUserList);
+        updatePaginationUI(0, 1);
+        showToast(parseApiError(err, '获取客户列表失败'), 2500);
+        return null;
     });
 }
 
@@ -193,21 +178,6 @@ function goToLastPage() {
 }
 
 function addUser(userData) {
-    if (!isApiAvailable) {
-        const newId = generateNewIdFromMock();
-        const newUser = {
-            customer_id: newId,
-            customer_name: userData.customer_name,
-            pid: userData.pid || '',
-            telephone: userData.telephone || '',
-            address: userData.address || ''
-        };
-        currentUserList.push(newUser);
-        renderUserTable(currentUserList);
-        showToast("✅ 新增成功 (测试模式)", 2000);
-        return Promise.resolve(newUser);
-    }
-    
     return $.ajax({
         url: API_BASE_URL,
         method: 'POST',
@@ -219,20 +189,9 @@ function addUser(userData) {
         showToast("新增客户成功", 1500);
         return newUser;
     }).catch(err => {
-        console.error("新增接口失败，切换至测试模式并新增", err);
-        isApiAvailable = false;
-        const newId = generateNewIdFromMock();
-        const fallbackUser = {
-            customer_id: newId,
-            customer_name: userData.customer_name,
-            pid: userData.pid || '',
-            telephone: userData.telephone || '',
-            address: userData.address || ''
-        };
-        currentUserList.push(fallbackUser);
-        renderUserTable(currentUserList);
-        showToast("⚠️ 接口失效，已在本地测试数据中添加", 2500);
-        return fallbackUser;
+        console.error("新增客户失败:", err);
+        showToast(parseApiError(err, '新增客户失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -246,15 +205,9 @@ function updateUser(userId, userData) {
         fetchUserList();
         showToast("客户信息更新成功", 1500);
     }).catch(err => {
-        console.error("更新接口失败，降级本地修改", err);
-        isApiAvailable = false;
-        const index = currentUserList.findIndex(u => u.customer_id === userId);
-        if (index !== -1) {
-            currentUserList[index] = { ...currentUserList[index], ...userData, customer_id: userId };
-            renderUserTable(currentUserList);
-            showToast("⚠️ 接口不可用，已本地修改", 2000);
-        }
-        return Promise.resolve();
+        console.error("更新客户失败:", err);
+        showToast(parseApiError(err, '更新客户失败'), 2500);
+        return Promise.reject(err);
     });
 }
 
@@ -266,21 +219,9 @@ function deleteUser(userId) {
         fetchUserList();
         showToast("删除成功", 1500);
     }).catch(err => {
-        console.error("删除接口失败:", err);
-        const idx = currentUserList.findIndex(u => u.customer_id === userId);
-        if (idx !== -1) {
-            currentUserList.splice(idx, 1);
-            renderUserTable(currentUserList);
-            showToast("⚠️ 接口不可用，已本地删除", 2000);
-        }
-        return Promise.resolve();
+        console.error("删除客户失败:", err);
+        showToast(parseApiError(err, '删除客户失败'), 2500);
     });
-}
-
-function generateNewIdFromMock() {
-    if (!currentUserList.length) return 2001;
-    const maxId = Math.max(...currentUserList.map(u => u.customer_id));
-    return maxId + 1;
 }
 
 let toastTimer = null;
@@ -351,12 +292,12 @@ function onSaveUser() {
     if (currentModalMode === 'add') {
         addUser(payload).then(() => {
             closeModal();
-        }).catch(() => { closeModal(); });
+        }).catch(() => {});
     } else {
         const editId = parseInt($('#editUserId').val());
         updateUser(editId, payload).then(() => {
             closeModal();
-        }).catch(() => { closeModal(); });
+        }).catch(() => {});
     }
 }
 
@@ -386,11 +327,9 @@ function stopAutoRefresh() {
 function handleRefresh() {
     const $btn = $('#refreshBtn');
     $btn.addClass('refreshing');
-    fetchUserList().then(() => {
+    fetchUserList().then(data => {
         $btn.removeClass('refreshing');
-        showToast("数据已刷新", 1500);
-    }).catch(() => {
-        $btn.removeClass('refreshing');
+        if (data) { showToast("数据已刷新", 1500); }
     });
 }
 

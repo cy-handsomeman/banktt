@@ -117,6 +117,7 @@ CREATE TABLE IF NOT EXISTS `trade_info` (
     `tid`         INT           NOT NULL AUTO_INCREMENT COMMENT '交易编号（标识列），从1开始，主键',
     `trans_type`  VARCHAR(50)   NOT NULL                COMMENT '交易类型，必填',
     `card_id`     VARCHAR(20)   NOT NULL                COMMENT '银行卡号，必填',
+    `to_card_id`  VARCHAR(20)   DEFAULT NULL            COMMENT '对方银行卡号，仅转账流水使用',
     `trans_date`  DATETIME      NOT NULL                COMMENT '交易日期，必填',
     `trans_money` DECIMAL(18,2) NOT NULL                COMMENT '交易金额，必填',
     `remark`      VARCHAR(200)  DEFAULT NULL            COMMENT '备注，非必填',
@@ -141,10 +142,11 @@ INSERT IGNORE INTO `sys_menu` (`menu_id`, `menu_name`, `menu_url`, `parent_id`, 
     (5, '角色管理',     '/role/',      0, 5, '角色维护'),
     (6, '用户角色关联', '/user_role/', 0, 6, '账号与角色绑定');
 
+-- 超管 / 大堂经理：全部菜单；银行柜员：仅业务菜单（客户 / 银行卡 / 交易）
 INSERT IGNORE INTO `sys_role_menu` (`role_id`, `menu_id`) VALUES
     (1, 1), (1, 2), (1, 3), (1, 4), (1, 5), (1, 6),
     (2, 1), (2, 2), (2, 3), (2, 4), (2, 5), (2, 6),
-    (3, 1), (3, 2), (3, 3), (3, 4), (3, 5), (3, 6);
+    (3, 1), (3, 2), (3, 3);
 
 -- 初始管理员（密码为 pbkdf2 哈希，明文 admin123；请勿直接改写为明文）
 INSERT IGNORE INTO `sys_user`

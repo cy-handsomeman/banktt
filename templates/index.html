@@ -489,11 +489,9 @@
         function loadUserMenu() {
             const userId = getCurrentUserId();
             
-            // 如果没有登录用户ID，显示默认菜单
+            // 没有登录用户ID 说明未登录或会话已失效，直接回登录页
             if (!userId) {
-                console.log('未获取到用户ID，显示默认菜单');
-                updateRoleDisplay('无角色');
-                renderDefaultMenu();
+                window.location.href = '/login/';
                 return Promise.resolve();
             }
             
@@ -513,7 +511,8 @@
             }).catch(err => {
                 console.error('获取用户菜单失败:', err);
                 updateRoleDisplay('无角色');
-                renderDefaultMenu();
+                renderEmptyMenu('菜单加载失败，请刷新页面重试');
+                showToast(window.parseApiError ? parseApiError(err, '菜单加载失败') : '菜单加载失败', 2500);
             });
         }
 
@@ -522,9 +521,9 @@
             const container = $('#navLinks');
             let html = '';
             
-            // 如果菜单为空，显示默认菜单
+            // 菜单为空说明该账号没有任何授权菜单，如实提示而不是伪造一套菜单
             if (!userPermissions.menu || userPermissions.menu.length === 0) {
-                renderDefaultMenu();
+                renderEmptyMenu('当前账号未分配任何菜单，请联系管理员授权');
                 return;
             }
             
@@ -586,73 +585,14 @@
             }
         }
 
-        // 渲染默认菜单（当获取用户菜单失败时使用）
-        function renderDefaultMenu() {
-            const container = $('#navLinks');
-            const defaultMenu = [
-                {
-                    group: '业务管理',
-                    items: [
-                        { key: 'user_info', title: '客户管理', icon: 'fas fa-users', url: '/user/' },
-                        { key: 'card_info', title: '银行卡管理', icon: 'fas fa-credit-card', url: '/card/' },
-                        { key: 'trade_info', title: '交易管理', icon: 'fas fa-exchange-alt', url: '/trade/' }
-                    ],
-                    locked: false
-                },
-                {
-                    group: '权限管理',
-                    items: [
-                        { key: 'sys_user', title: '系统用户', icon: 'fas fa-user-circle', url: '/sys_user/' },
-                        { key: 'sys_role', title: '角色管理', icon: 'fas fa-shield-alt', url: '/role/' },
-                        { key: 'sys_user_role', title: '用户角色分配', icon: 'fas fa-user-shield', url: '/user_role/' }
-                    ],
-                    locked: false
-                }
-            ];
-            
-            let html = '';
-            defaultMenu.forEach((group, groupIndex) => {
-                html += `
-                    <div class="nav-group">
-                        <div class="nav-group-title" data-group-index="${groupIndex}" data-locked="false">${group.group}</div>
-                        <div class="nav-group-content expanded">
-                `;
-                group.items.forEach(item => {
-                    html += `
-                        <div class="nav-item" data-target="${item.key}" data-url="${item.url}">
-                            <i class="${item.icon}"></i>
-                            <span>${item.title}</span>
-                        </div>
-                    `;
-                });
-                html += `
-                        </div>
-                    </div>
-                `;
-            });
-            
-            container.html(html);
-            
-            // 绑定分组标题点击事件
-            $('.nav-group-title').on('click', function() {
-                const content = $(this).next('.nav-group-content');
-                if (content.hasClass('expanded')) {
-                    content.removeClass('expanded').addClass('collapsed');
-                    $(this).addClass('collapsed');
-                } else {
-                    content.removeClass('collapsed').addClass('expanded');
-                    $(this).removeClass('collapsed');
-                }
-            });
-            
-            // 绑定菜单项点击事件
-            $('.nav-item').on('click', function() {
-                const url = $(this).data('url');
-                loadPage(url, $(this));
-            });
-            
-            // 默认加载第一个页面
-            loadPage('/user/', $('.nav-item').first());
+        // 菜单不可用时如实显示占位信息，不再伪造一套有全部权限的菜单
+        function renderEmptyMenu(message) {
+            $('#navLinks').html(`
+                <div style="padding: 18px; color: rgba(255,255,255,0.65); font-size: 0.85rem; line-height: 1.8;">
+                    <i class="fas fa-info-circle"></i> ${message}
+                </div>
+            `);
+            $('#contentIframe').attr('src', 'about:blank');
         }
 
         // 加载页面内容
@@ -690,19 +630,16 @@
                 sessionStorage.removeItem('user_name');
                 sessionStorage.removeItem('access_token');
                 sessionStorage.removeItem('refresh_token');
-                
+
                 // 更新用户信息显示
                 updateUserNameDisplay(null);
                 updateRoleDisplay('无角色');
-                
-                // 重新加载菜单
-                renderDefaultMenu();
-                
-                // 提示退出成功
-                showToast('已成功退出登录', 2000);
-                
-                // 跳转到首页
-                loadPage('/user/', $('.nav-item').first());
+                renderEmptyMenu('已退出登录');
+
+                showToast('已成功退出登录', 1200);
+
+                // 退出后必须离开工作台，否则仍能看到上一个账号的页面内容
+                setTimeout(function() { window.location.href = '/login/'; }, 300);
             }
         }
 
