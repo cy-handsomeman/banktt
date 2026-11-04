@@ -302,40 +302,34 @@ function loadMenuItems(roleId) {
     });
 }
 
-// 权限类菜单：系统用户/角色/用户角色关联；其余归入业务管理
-function isPermissionMenu(menu) {
-    const url = (menu.menu_url || '').replace(/\/+$/, '/');
-    return ['/sys_user/', '/role/', '/user_role/'].includes(url);
-}
-
 function renderMenuItems(assignedMenuIds) {
-    const businessMenus = menuList.filter(m => !isPermissionMenu(m));
-    const permissionMenus = menuList.filter(m => isPermissionMenu(m));
-    
-    let businessHtml = '';
-    businessMenus.forEach(menu => {
-        const isChecked = assignedMenuIds.includes(menu.menu_id);
-        businessHtml += `
-            <div class="menu-item ${isChecked ? 'selected' : ''}" data-menu-id="${menu.menu_id}">
-                <input type="checkbox" id="menu_${menu.menu_id}" ${isChecked ? 'checked' : ''}>
-                <label for="menu_${menu.menu_id}">${escapeHtml(menu.menu_name)}</label>
-            </div>
-        `;
+    // 分组名称与顺序全部来自 sys_menu.menu_group，避免前端维护 URL 映射
+    const groups = {};
+    menuList.forEach(menu => {
+        const groupName = (menu.menu_group || '').trim() || '其他';
+        (groups[groupName] = groups[groupName] || []).push(menu);
     });
-    
-    let permissionHtml = '';
-    permissionMenus.forEach(menu => {
-        const isChecked = assignedMenuIds.includes(menu.menu_id);
-        permissionHtml += `
-            <div class="menu-item ${isChecked ? 'selected' : ''}" data-menu-id="${menu.menu_id}">
-                <input type="checkbox" id="menu_${menu.menu_id}" ${isChecked ? 'checked' : ''}>
-                <label for="menu_${menu.menu_id}">${escapeHtml(menu.menu_name)}</label>
-            </div>
+
+    let html = '';
+    Object.keys(groups).forEach(groupName => {
+        html += `
+            <div class="menu-section">
+                <h4 class="menu-section-title"><i class="fas fa-layer-group"></i> ${escapeHtml(groupName)}</h4>
+                <div class="menu-items">
         `;
+        groups[groupName].forEach(menu => {
+            const isChecked = assignedMenuIds.includes(menu.menu_id);
+            html += `
+                <div class="menu-item ${isChecked ? 'selected' : ''}" data-menu-id="${menu.menu_id}">
+                    <input type="checkbox" id="menu_${menu.menu_id}" ${isChecked ? 'checked' : ''}>
+                    <label for="menu_${menu.menu_id}">${escapeHtml(menu.menu_name)}</label>
+                </div>
+            `;
+        });
+        html += '</div></div>';
     });
-    
-    $('#businessMenuItems').html(businessHtml);
-    $('#permissionMenuItems').html(permissionHtml);
+
+    $('#menuGroups').html(html);
     
     $('.menu-item').off('click').on('click', function(e) {
         const checkbox = $(this).find('input[type="checkbox"]');
@@ -362,8 +356,8 @@ function saveMenuPermissions() {
     }).then(() => {
         showToast("菜单权限分配成功", 1500);
         closeMenuModal();
-    }).catch(() => {
-        showToast("⚠️ 保存失败", 2000);
+    }).catch(err => {
+        showToast(parseApiError(err, '保存菜单权限失败'), 2000);
     });
 }
 

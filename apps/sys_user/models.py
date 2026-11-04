@@ -16,3 +16,25 @@ class SysUser(models.Model):
         managed = False
         db_table = 'sys_user'
         db_table_comment = '系统用户表'
+
+
+class SysLoginLog(models.Model):
+    """登录日志（含成功与失败），用于安全审计"""
+
+    id = models.AutoField(primary_key=True, db_comment='日志ID')
+    user_id = models.IntegerField(blank=True, null=True, db_comment='用户编号')
+    user_name = models.CharField(
+        max_length=100, blank=True, null=True, db_comment='登录用户名'
+    )
+    login_ip = models.CharField(max_length=64, blank=True, null=True, db_comment='登录IP')
+    user_agent = models.CharField(
+        max_length=255, blank=True, null=True, db_comment='浏览器标识'
+    )
+    status = models.CharField(max_length=10, db_comment='结果：成功/失败')
+    message = models.CharField(max_length=200, blank=True, null=True, db_comment='说明')
+    login_time = models.DateTimeField(db_comment='登录时间')
+
+    class Meta:
+        managed = False
+        db_table = 'sys_login_log'
+        db_table_comment = '登录日志表'

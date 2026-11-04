@@ -441,6 +441,7 @@
         </main>
     </div>
 
+    <script src="/static/js/auth.js"></script>
     <script>
         // 用户下拉菜单控制
         function toggleUserDropdown() {
@@ -625,11 +626,8 @@
         // 退出登录
         function logout() {
             if (confirm('确定要退出登录吗？')) {
-                // 清除sessionStorage
-                sessionStorage.removeItem('user_id');
-                sessionStorage.removeItem('user_name');
-                sessionStorage.removeItem('access_token');
-                sessionStorage.removeItem('refresh_token');
+                // 退出时清空会话数据（token、用户名、用户ID）
+                sessionStorage.clear();
 
                 // 更新用户信息显示
                 updateUserNameDisplay(null);
@@ -671,21 +669,12 @@
 
         // 页面加载完成后初始化
         $(document).ready(function() {
-            // 统一给所有 API 请求带上 JWT，未登录则跳转登录页
+            // 未登录直接回登录页；token 附加与自动续期由 auth.js 统一处理
             const accessToken = sessionStorage.getItem('access_token');
             if (!accessToken) {
                 window.location.href = '/login/';
                 return;
             }
-            $.ajaxSetup({
-                headers: { 'Authorization': 'Bearer ' + accessToken }
-            });
-            $(document).ajaxError(function(event, jqXHR) {
-                if (jqXHR.status === 401) {
-                    sessionStorage.clear();
-                    window.location.href = '/login/';
-                }
-            });
 
             // 初始化用户名显示
             const userName = getCurrentUserName();

@@ -11,7 +11,7 @@ const API_BASE_URL = '/api/trade/';
 function renderTable(data) {
     const tbody = $('#dataTableBody');
     if (!data || data.length === 0) {
-        tbody.html('<tr class="empty-row"><td colspan="8">暂无交易数据</td></tr>');
+        tbody.html('<tr class="empty-row"><td colspan="10">暂无交易数据</td></tr>');
         return;
     }
     let html = '';
@@ -19,12 +19,24 @@ function renderTable(data) {
         const transMoney = item.trans_money !== null ? '¥' + parseFloat(item.trans_money).toFixed(2) : '—';
         const transDate = item.trans_date ? item.trans_date.replace('T', ' ').slice(0, 19) : '—';
         const toCardId = item.to_card_id ? escapeHtml(item.to_card_id) : '—';
+        const balanceAfter = item.balance_after !== null && item.balance_after !== undefined
+            ? '¥' + parseFloat(item.balance_after).toFixed(2) : '—';
         // 转账的两条流水是成对的，不允许单独修改或删除
         const isTransferLeg = item.trans_type === '转账转出' || item.trans_type === '转账转入';
-        const actionHtml = isTransferLeg
-            ? '<span class="transfer-locked" title="转账流水不支持修改/删除">—</span>'
-            : `<button class="edit-btn" data-id="${item.tid}" title="编辑"><i class="fas fa-edit"></i></button>
-                <button class="delete-btn" data-id="${item.tid}" title="删除"><i class="fas fa-trash-alt"></i></button>`;
+        const isReversal = item.trans_type === '冲正';
+        const statusHtml = item.is_reversed
+            ? '<span style="color:#b45309;font-weight:600;">已冲正</span>'
+            : (isReversal ? '<span style="color:#6b7280;">冲正流水</span>' : '正常');
+
+        let actionHtml = '<span class="transfer-locked" title="该流水不支持修改/删除">—</span>';
+        if (!item.is_reversed && !isReversal) {
+            const editBtn = isTransferLeg ? '' :
+                `<button class="edit-btn" data-id="${item.tid}" title="编辑"><i class="fas fa-edit"></i></button>
+                 <button class="delete-btn" data-id="${item.tid}" title="删除"><i class="fas fa-trash-alt"></i></button>`;
+            actionHtml = editBtn +
+                `<button class="reverse-btn" data-id="${item.tid}" title="冲正"><i class="fas fa-undo-alt"></i></button>`;
+        }
+
         html += `<tr data-id="${item.tid}">
             <td>${item.tid}</td>
             <td><strong>${escapeHtml(item.trans_type)}</strong></td>
@@ -32,6 +44,8 @@ function renderTable(data) {
             <td>${toCardId}</td>
             <td>${transDate}</td>
             <td class="money-cell">${transMoney}</td>
+            <td class="money-cell">${balanceAfter}</td>
+            <td>${statusHtml}</td>
             <td>${escapeHtml(item.remark || '—')}</td>
             <td class="action-buttons">${actionHtml}</td>
         </tr>`;
@@ -39,6 +53,7 @@ function renderTable(data) {
     tbody.html(html);
     $('.edit-btn').off('click').on('click', function() { openEditModal(parseInt($(this).data('id'))); });
     $('.delete-btn').off('click').on('click', function() { confirmDelete(parseInt($(this).data('id'))); });
+    $('.reverse-btn').off('click').on('click', function() { confirmReverse(parseInt($(this).data('id'))); });
 }
 
 function escapeHtml(str) {
@@ -245,10 +260,9 @@ function openEditModal(id) {
     $('#trans_type').val(item.trans_type === '转账转出' ? '转账' : item.trans_type);
     $('#card_id').val(item.card_id);
     $('#to_card_id').val(item.to_card_id || '');
-    if (item.trans_date) {
-        const dt = item.trans_date.replace(' ', 'T').slice(0, 16);
-        $('#trans_date').val(dt);
-    }
+    $('#trans_date_display').val(
+        item.trans_date ? item.trans_date.replace('T', ' ').slice(0, 19) + '（不可修改）' : '保存时由系统自动记录'
+    );
     $('#trans_money').val(item.trans_money);
     $('#remark').val(item.remark || '');
     toggleToCardField();
@@ -261,20 +275,17 @@ function onSave() {
     const transType = $('#trans_type').val();
     const cardId = $('#card_id').val().trim();
     const toCardId = $('#to_card_id').val().trim();
-    const transDate = $('#trans_date').val();
     const transMoney = $('#trans_money').val();
     
     if (!transType) { showToast("请选择交易类型", 1500); return; }
     if (!cardId) { showToast("银行卡号不能为空", 1500); return; }
     if (transType === '转账' && !toCardId) { showToast("转账必须填写收款卡号", 1500); return; }
     if (transType === '转账' && toCardId === cardId) { showToast("收款卡号不能与付款卡号相同", 1500); return; }
-    if (!transDate) { showToast("请选择交易日期", 1500); return; }
     if (!transMoney) { showToast("交易金额不能为空", 1500); return; }
     
     const payload = {
         trans_type: transType,
         card_id: cardId,
-        trans_date: transDate.replace('T', ' ') + ':00',
         trans_money: parseFloat(transMoney),
         remark: $('#remark').val().trim()
     };
@@ -298,6 +309,30 @@ function toggleToCardField() {
 
 function confirmDelete(id) {
     if (confirm('确定要删除这条交易记录吗？')) { deleteItem(id); }
+}
+
+function reverseItem(id) {
+    return $.ajax({
+        url: `${API_BASE_URL}${id}/reverse/`,
+        method: 'POST',
+        contentType: 'application/json'
+    }).then(() => {
+        fetchList();
+        showToast("冲正成功", 1500);
+    }).catch(err => {
+        console.error("冲正失败:", err);
+        showToast(parseApiError(err, '冲正失败'), 2500);
+    });
+}
+
+function confirmReverse(id) {
+    const item = currentList.find(u => u.tid === id);
+    const type = item ? item.trans_type : '';
+    const isTransfer = type === '转账转出' || type === '转账转入';
+    const tip = isTransfer
+        ? '冲正该笔转账会同时冲销收付款双方的流水，确定继续吗？'
+        : '确定要对这笔交易发起冲正吗？冲正后将生成反向流水且原交易不可再修改。';
+    if (confirm(tip)) { reverseItem(id); }
 }
 
 let refreshInterval = null;

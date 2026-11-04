@@ -1,14 +1,16 @@
 from django.shortcuts import render
 from django.contrib.auth.hashers import check_password
 from django.db import transaction
+from django.utils import timezone
 from rest_framework import viewsets, status  # 需要添加 status
 from rest_framework.exceptions import ValidationError
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response  # 需要添加 Response
 from rest_framework.decorators import action
+from rest_framework.viewsets import ReadOnlyModelViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
-from apps.sys_user.models import SysUser
-from apps.sys_user.serializers import SysUserSerializer
+from apps.sys_user.models import SysLoginLog, SysUser
+from apps.sys_user.serializers import SysLoginLogSerializer, SysUserSerializer
 from apps.sys_user.permissions import IsSuperAdmin
 from apps.sys_user_role.models import SysUserRole
 
@@ -16,6 +18,43 @@ from apps.sys_user_role.models import SysUserRole
 def sys_user_list(request):
     users = SysUser.objects.all()
     return render(request, 'sys_user.html', {'users': users})
+
+
+def login_log_list(request):
+    return render(request, 'sys_login_log.html')
+
+
+def _client_ip(request):
+    forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
+    if forwarded:
+        return forwarded.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR') or ''
+
+
+def _write_login_log(request, user, user_name, success, message):
+    """记录登录结果；写日志失败不能影响登录本身"""
+    try:
+        SysLoginLog.objects.create(
+            user_id=getattr(user, 'user_id', None),
+            user_name=(user_name or '')[:100],
+            login_ip=_client_ip(request)[:64],
+            user_agent=(request.META.get('HTTP_USER_AGENT') or '')[:255],
+            status='成功' if success else '失败',
+            message=message,
+            login_time=timezone.now(),
+        )
+    except Exception:
+        pass
+
+
+class SysLoginLogViewSet(ReadOnlyModelViewSet):
+    """登录日志查询（只读，仅超级管理员可见）"""
+
+    queryset = SysLoginLog.objects.all().order_by('-id')
+    serializer_class = SysLoginLogSerializer
+    permission_classes = [IsSuperAdmin]
+    filterset_fields = ['user_id', 'user_name', 'status']
+    search_fields = ['user_name', 'login_ip', 'message']
 
 
 class SysUserViewSet(viewsets.ModelViewSet):
@@ -45,16 +84,18 @@ class SysUserViewSet(viewsets.ModelViewSet):
         authentication_classes=[],       # 忽略请求头里可能过期的 token
     )
     def login(self, request):
-        """登录接口：校验通过后签发 access / refresh token"""
-        user_name = request.data.get('userName')
+        """登录接口：校验通过后签发 access / refresh token，并记录登录日志"""
+        user_name = (request.data.get('userName') or '').strip()
         password = request.data.get('password')
 
-        if not user_name or str(user_name).strip() == '':
+        if not user_name:
+            _write_login_log(request, None, user_name, False, '用户名不能为空')
             return Response(
                 {'code': 40001, 'message': '用户名不能为空', 'data': None},
                 status=status.HTTP_400_BAD_REQUEST
             )
         if not password:
+            _write_login_log(request, None, user_name, False, '密码不能为空')
             return Response(
                 {'code': 40002, 'message': '密码不能为空', 'data': None},
                 status=status.HTTP_400_BAD_REQUEST
@@ -63,11 +104,13 @@ class SysUserViewSet(viewsets.ModelViewSet):
         user = SysUser.objects.filter(user_name=user_name).first()
         if user is None or not check_password(password, user.password):
             # 统一提示，避免通过错误信息枚举账号
+            _write_login_log(request, user, user_name, False, '用户名或密码错误')
             return Response(
                 {'code': 40101, 'message': '用户名或密码错误', 'data': None},
                 status=status.HTTP_401_UNAUTHORIZED
             )
 
+        _write_login_log(request, user, user_name, True, '登录成功')
         refresh = RefreshToken.for_user(user)
         return Response(
             {

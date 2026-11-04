@@ -19,16 +19,7 @@ def sys_user_role_list(request):
     return render(request, 'sys_user_role.html')
 
 
-# 菜单展示配置：只负责图标和分组归属，菜单本身（名称/地址/排序）以 sys_menu 表为准
-MENU_PRESENTATION = {
-    '/user/': {'icon': 'fas fa-users', 'group': '业务管理'},
-    '/card/': {'icon': 'fas fa-credit-card', 'group': '业务管理'},
-    '/trade/': {'icon': 'fas fa-exchange-alt', 'group': '业务管理'},
-    '/sys_user/': {'icon': 'fas fa-user-circle', 'group': '权限管理'},
-    '/role/': {'icon': 'fas fa-shield-alt', 'group': '权限管理'},
-    '/user_role/': {'icon': 'fas fa-user-shield', 'group': '权限管理'},
-}
-GROUP_ORDER = ['业务管理', '权限管理']
+# 菜单分组 / 图标全部来自 sys_menu 表，代码里不再维护任何 URL 映射
 DEFAULT_GROUP = '其他'
 DEFAULT_ICON = 'fas fa-circle'
 
@@ -49,16 +40,15 @@ def _menu_key(url):
 
 
 def _build_menu(menus):
-    """按 sys_menu 表构建前端导航，分组与图标来自 MENU_PRESENTATION"""
+    """按 sys_menu 表的字段构建前端导航（分组、图标、排序均以数据库为准）"""
     groups = {}
     for menu in menus:
         url = _normalize_url(menu.menu_url)
-        presentation = MENU_PRESENTATION.get(url, {})
-        group_name = presentation.get('group', DEFAULT_GROUP)
+        group_name = (menu.menu_group or '').strip() or DEFAULT_GROUP
         groups.setdefault(group_name, []).append({
             'key': _menu_key(url),
             'title': menu.menu_name,
-            'icon': presentation.get('icon', DEFAULT_ICON),
+            'icon': (menu.icon or '').strip() or DEFAULT_ICON,
             'url': url,
             'order': menu.sort_order or 0,
             'menu_id': menu.menu_id,
@@ -67,17 +57,17 @@ def _build_menu(menus):
     for items in groups.values():
         items.sort(key=lambda item: (item['order'], item['menu_id']))
 
-    ordered_group_names = GROUP_ORDER + sorted(
-        name for name in groups if name not in GROUP_ORDER
+    # 分组顺序按组内最小排序号排列，全部由数据库决定
+    ordered_group_names = sorted(
+        groups, key=lambda name: min(item['order'] for item in groups[name])
     )
     user_menu = []
     for group_name in ordered_group_names:
-        if groups.get(group_name):
-            user_menu.append({
-                'group': group_name,
-                'items': groups[group_name],
-                'locked': False,
-            })
+        user_menu.append({
+            'group': group_name,
+            'items': groups[group_name],
+            'locked': False,
+        })
     return user_menu
 
 

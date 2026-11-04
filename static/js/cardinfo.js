@@ -18,22 +18,39 @@ function renderTable(data) {
         const openDate = item.open_date ? item.open_date.replace('T', ' ').slice(0, 19) : '—';
         const openMoney = item.open_money !== null ? '¥' + parseFloat(item.open_money).toFixed(2) : '—';
         const balance = item.balance !== null ? '¥' + parseFloat(item.balance).toFixed(2) : '—';
+        const status = item.card_status || '正常';
+        const statusColor = status === '正常' ? '#047857' : (status === '挂失' ? '#b45309' : '#6b7280');
+        let statusActions = '';
+        if (status === '正常') {
+            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="report-loss" title="挂失" style="padding:4px 8px;margin-right:4px;border:1px solid #f59e0b;border-radius:6px;background:#fffbeb;color:#b45309;cursor:pointer;font-size:0.78rem;">挂失</button>`;
+        }
+        if (status === '挂失') {
+            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="unlock" title="解挂" style="padding:4px 8px;margin-right:4px;border:1px solid #10b981;border-radius:6px;background:#ecfdf5;color:#047857;cursor:pointer;font-size:0.78rem;">解挂</button>`;
+        }
+        if (status !== '销户') {
+            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="close" title="销卡" style="padding:4px 8px;margin-right:4px;border:1px solid #dc2626;border-radius:6px;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:0.78rem;">销卡</button>`;
+        }
         html += `<tr data-id="${item.card_id}">
             <td class="card-id-cell">${escapeHtml(item.card_id)}</td>
             <td><strong>${escapeHtml(item.cur_type)}</strong></td>
+            <td><span style="color:${statusColor};font-weight:600;">${escapeHtml(status)}</span></td>
             <td>${openDate}</td>
             <td class="money-cell">${openMoney}</td>
             <td class="money-cell">${balance}</td>
             <td>${item.customer_id}</td>
             <td class="action-buttons">
-                <button class="edit-btn" data-id="${item.card_id}"><i class="fas fa-edit"></i></button>
-                <button class="delete-btn" data-id="${item.card_id}"><i class="fas fa-trash-alt"></i></button>
+                <button class="edit-btn" data-id="${escapeHtml(item.card_id)}"><i class="fas fa-edit"></i></button>
+                <button class="delete-btn" data-id="${escapeHtml(item.card_id)}"><i class="fas fa-trash-alt"></i></button>
+                ${statusActions}
             </td>
         </tr>`;
     });
     tbody.html(html);
     $('.edit-btn').off('click').on('click', function() { openEditModal($(this).data('id')); });
     $('.delete-btn').off('click').on('click', function() { confirmDelete($(this).data('id')); });
+    $('.status-btn').off('click').on('click', function() {
+        handleStatusAction($(this).data('id'), $(this).data('action'));
+    });
 }
 
 function escapeHtml(str) {
@@ -208,6 +225,28 @@ function deleteItem(cardId) {
     }).catch(err => {
         console.error("删除银行卡失败:", err);
         showToast(parseApiError(err, '删除银行卡失败'), 2500);
+    });
+}
+
+function handleStatusAction(cardId, action) {
+    const configs = {
+        'report-loss': { tip: '确定要挂失该银行卡吗？挂失后将无法进行交易。', ok: '挂失成功' },
+        'unlock': { tip: '确定要解挂该银行卡吗？', ok: '解挂成功' },
+        'close': { tip: '确定要销卡吗？销卡后状态变为销户且不可恢复，且要求卡内余额为 0。', ok: '销卡成功' }
+    };
+    const config = configs[action];
+    if (!config || !confirm(config.tip)) { return; }
+
+    $.ajax({
+        url: `${API_BASE_URL}${cardId}/${action}/`,
+        method: 'POST',
+        contentType: 'application/json'
+    }).then(() => {
+        fetchList();
+        showToast(config.ok, 1500);
+    }).catch(err => {
+        console.error('银行卡状态变更失败:', err);
+        showToast(parseApiError(err, '银行卡状态变更失败'), 2500);
     });
 }
 

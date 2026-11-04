@@ -24,7 +24,7 @@ banktt/
 ├── .env.example              # 环境变量模板（可提交）
 ├── .env                      # 本地真实配置（禁止提交，已在 .gitignore 中）
 ├── sql/
-│   └── bank_init.sql         # ★ 数据库初始化脚本（建库 + 8 张业务表 + 初始角色/菜单/管理员）
+│   └── bank_init.sql         # ★ 数据库初始化脚本（建库 + 8 张业务表 + 登录日志表 + 初始角色/菜单/管理员）
 ├── banktt/                   # 全局配置（settings.py / urls.py / wsgi.py / asgi.py）
 ├── apps/                     # 8 个业务应用
 │   ├── sys_user/             # 系统用户
@@ -50,7 +50,7 @@ banktt/
 
 ### 第 1 步：准备数据库
 
-项目使用 8 张业务表，其中 7 个模型标记为 `managed = False`（数据库优先），**Django 不会自动建表**，必须先导入 `sql/bank_init.sql`。
+项目使用 8 张业务表 + 1 张登录日志表，所有模型均标记为 `managed = False`（数据库优先），**Django 不会自动建表**，必须先导入 `sql/bank_init.sql`。
 
 **方式 A：命令行（推荐）**
 
@@ -71,9 +71,9 @@ USE bank;
 SHOW TABLES;
 ```
 
-应看到 8 张表：`sys_user`、`sys_role`、`sys_menu`、`sys_user_role`、`sys_role_menu`、`user_info`、`card_info`、`trade_info`。
+应看到 9 张表：`sys_user`、`sys_role`、`sys_menu`、`sys_user_role`、`sys_role_menu`、`sys_login_log`、`user_info`、`card_info`、`trade_info`。
 
-脚本同时写入初始数据：3 个角色、6 个菜单、角色菜单绑定，以及一个初始管理员账号。
+脚本同时写入初始数据：3 个角色、8 个菜单、角色菜单绑定，以及一个初始管理员账号。
 
 **默认账号：`admin` / `admin123`**（密码在库中以 PBKDF2 哈希保存，登录后请立即修改）。
 
@@ -157,6 +157,8 @@ Starting development server at http://127.0.0.1:8000/
 | --- | --- |
 | http://127.0.0.1:8000/ | 首页（`index.html`） |
 | http://127.0.0.1:8000/login/ | 登录页 |
+| http://127.0.0.1:8000/menu/ | 菜单管理（仅超级管理员） |
+| http://127.0.0.1:8000/login_log/ | 登录日志（仅超级管理员） |
 | http://127.0.0.1:8000/docs/ | Swagger 接口文档 |
 | http://127.0.0.1:8000/api/schema/ | OpenAPI 描述文件 |
 
@@ -166,15 +168,16 @@ Starting development server at http://127.0.0.1:8000/
 
 - 仅 `POST /api/sys_user/login/`、`/docs/`、`/api/schema/` 免登录；
 - 其余 `/api/` 接口必须携带请求头：`Authorization: Bearer <access>`，否则返回 `401`；
-- access 默认 60 分钟过期，可用 `POST /api/token/refresh/`（body 传 `refresh`）换取新的 access；
+- access 默认 60 分钟过期，前端 `auth.js` 会在 401 时自动用 refresh 换新 token 并重放请求；也可手动调用 `POST /api/token/refresh/`（body 传 `refresh`）换取新的 access；
+- 退出登录会清空整个 `sessionStorage`（access / refresh / 用户名 / 用户ID）；
 - 登录返回 `code / message / data`，`data` 中包含 `access`、`refresh`；
-- `sys_user`、`sys_role`、`sys_menu`、`sys_role_menu`、`sys_user_role` 的写操作仅超级管理员（`role_id=1`）可执行。
+- `sys_user`、`sys_role`、`sys_menu`、`sys_role_menu`、`sys_user_role`、`login_log` 的访问仅超级管理员（`role_id=1`）。
 
 ## 数据库说明（重要）
 
 本项目采用**数据库优先（database-first）**设计：
 
-- 8 个模型都是 `managed = False`，Django 不会对它们建表、改表或删表；
+- 8 个业务模型与登录日志模型都是 `managed = False`，Django 不会对它们建表、改表或删表；
 - 各应用的 `migrations/` 目录中只有 `__init__.py`，**没有任何迁移文件**；
 - 表结构的唯一来源是 `sql/bank_init.sql` 与真实 MySQL 数据库。
 
@@ -211,8 +214,18 @@ Starting development server at http://127.0.0.1:8000/
 - 系统用户 / 角色 / 菜单 / 授权接口（含查询）仅超级管理员可访问；
 - 业务数据（客户 / 银行卡 / 交易）：登录即可查询，新增与修改要求已分配角色，删除仅超级管理员或大堂经理；
 - 转账为双边记账：一次转账生成「转账转出」和「转账转入」两条流水，并同时更新两张卡的余额，两条流水不支持单独修改或删除；
+- 银行卡有「正常 / 挂失 / 销户」三种状态：挂失与销户卡禁止发起任何交易；销卡仅超级管理员或大堂经理可办理，且要求卡内余额为 0；
+- 交易支持冲正：由超级管理员或大堂经理发起，生成反向流水并把原交易标记为「已冲正」，转账会成对冲正；已冲正交易不可再修改或删除；
+- 每笔交易记录 `balance_after`（交易后余额快照），交易日期由后端生成，客户端不可伪造；
+- 登录成功与失败都会写入 `sys_login_log`（用户名、IP、浏览器标识、结果、时间），可在「登录日志」页面查询；
 - 删除客户 / 银行卡 / 系统用户 / 角色前会先检查关联数据，被引用时返回 400 与中文原因，不再因外键约束报 500；
+- 新建数据做格式校验：卡号 6-20 位数字、手机号 11 位、身份证 18 位；历史遗留数据保持原值时不拦截；
 - 登录与全站接口均有限流（匿名 30 次/分钟、登录用户 300 次/分钟）。
+
+关于银行卡密码与模型外键的说明：
+
+- **银行卡密码仅登记不校验**：开户时密码以 PBKDF2 哈希入库，但当前交易接口不要求输入卡密码，也不做密码比对。本项目定位是柜面后台管理，密码字段仅用于存储与展示控制；若需要真实校验，需在交易提交时增加 `card_password` 入参并调用 `check_password`。
+- **模型侧未声明 ForeignKey**：MySQL 中 `card_info.customer_id`、`trade_info.card_id`、`sys_user_role`、`sys_role_menu` 已有真实外键；但 `models.py` 保持 `IntegerField / CharField`，以便接口仍然直接收发 `customer_id` / `card_id` 标量，不改变既有 API 契约。关联完整性由数据库外键与视图层校验共同保证。
 
 投入真实使用前仍建议补充：
 

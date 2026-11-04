@@ -5,6 +5,9 @@ from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from rest_framework_simplejwt.views import TokenRefreshView
 from django.shortcuts import render
 
+from apps.sys_user.views import login_log_list
+from apps.sys_menu.views import menu_list
+
 def index(request):
     return render(request, 'index.html')
 
@@ -20,6 +23,8 @@ urlpatterns = [
     path('role/', include('apps.sys_role.urls')),  # sys_role 独立首页
     path('sys_user/', include('apps.sys_user.urls')),  # sys_user 独立首页
     path('user_role/', include('apps.sys_user_role.urls')),  # sys_user_role 独立首页
+    path('menu/', menu_list, name='menu_index'),  # 菜单管理首页
+    path('login_log/', login_log_list, name='login_log_index'),  # 登录日志首页
     path('api/', include('apps.user_info.urls')),
     path('api/', include('apps.trade_info.urls')),
     path('api/', include('apps.card_info.urls')),

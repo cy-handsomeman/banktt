@@ -10,6 +10,14 @@ class TradeInfo(models.Model):
     )
     trans_date = models.DateTimeField(db_comment='交易日期，必填')
     trans_money = models.DecimalField(max_digits=18, decimal_places=2, db_comment='交易金额，必填')
+    balance_after = models.DecimalField(
+        max_digits=18, decimal_places=2, blank=True, null=True,
+        db_comment='交易后余额快照',
+    )
+    is_reversed = models.BooleanField(default=False, db_comment='是否已冲正：0否 1是')
+    pair_tid = models.IntegerField(
+        blank=True, null=True, db_comment='转账配对流水ID'
+    )
     remark = models.CharField(max_length=200, blank=True, null=True, db_comment='备注，非必填')
 
     class Meta:

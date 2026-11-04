@@ -1,8 +1,13 @@
+import re
+
 from rest_framework import serializers
 from django.contrib.auth.hashers import make_password
 from django.contrib.auth.password_validation import validate_password as django_validate_password
 from django.core.exceptions import ValidationError as DjangoValidationError
-from apps.sys_user.models import SysUser
+from apps.sys_user.models import SysUser, SysLoginLog
+
+PID_PATTERN = re.compile(r'^\d{17}[\dXx]$')
+MOBILE_PATTERN = re.compile(r'^1[3-9]\d{9}$')
 
 #传输数据防止数据丢失
 class SysUserSerializer(serializers.ModelSerializer):
@@ -39,10 +44,32 @@ class SysUserSerializer(serializers.ModelSerializer):
         return value
 
     def validate_pid(self, value):
-        """身份证号唯一校验：新增与编辑时都排除自身"""
+        """身份证号格式与唯一校验：编辑时历史值保持不变则不拦截"""
+        if self.instance is None or value != self.instance.pid:
+            if not PID_PATTERN.fullmatch(value or ''):
+                raise serializers.ValidationError('身份证号必须为 18 位（末位可为 X）')
         queryset = SysUser.objects.filter(pid=value)
         if self.instance is not None:
             queryset = queryset.exclude(pk=self.instance.pk)
         if queryset.exists():
             raise serializers.ValidationError('该身份证号已存在，请勿重复录入')
         return value
+
+    def validate_mobile(self, value):
+        """手机号格式校验：编辑时历史值保持不变则不拦截"""
+        if self.instance is None or value != self.instance.mobile:
+            if not MOBILE_PATTERN.fullmatch(value or ''):
+                raise serializers.ValidationError('手机号必须为 11 位，且以 1 开头')
+        return value
+
+
+class SysLoginLogSerializer(serializers.ModelSerializer):
+    """登录日志只读序列化"""
+
+    class Meta:
+        model = SysLoginLog
+        fields = '__all__'
+        read_only_fields = (
+            'id', 'user_id', 'user_name', 'login_ip', 'user_agent',
+            'status', 'message', 'login_time',
+        )

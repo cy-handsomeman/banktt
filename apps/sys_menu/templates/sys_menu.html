@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>菜单管理</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/sysrole.css">
+</head>
+<body>
+<div class="manager">
+    <div class="header">
+        <h1><i class="fas fa-bars" style="margin-right: 12px;"></i>菜单管理</h1>
+        <div class="header-right">
+            <button class="btn-refresh" id="refreshBtn"><i class="fas fa-sync-alt"></i> 刷新</button>
+            <button class="btn-add" id="openAddModalBtn"><i class="fas fa-plus"></i> 新增菜单</button>
+        </div>
+    </div>
+    <div class="table-wrapper">
+        <table class="data-table" id="dataTable">
+            <thead>
+                <tr>
+                    <th>菜单ID</th><th>菜单名称</th><th>菜单地址</th><th>图标</th><th>分组</th><th>父菜单</th><th>排序</th><th width="120">操作</th>
+                </tr>
+            </thead>
+            <tbody id="dataTableBody">
+                <tr class="empty-row"><td colspan="8">加载中...</td></tr>
+            </tbody>
+        </table>
+    </div>
+    <div class="pagination-wrapper" id="paginationWrapper" style="display: none; margin-top: 20px;">
+        <div class="pagination-info" style="float: left; font-size: 0.85rem; color: #6b7280;">
+            共 <span id="totalCount">0</span> 条数据，当前第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
+        </div>
+        <div class="pagination" style="float: right; display: flex; align-items: center; gap: 6px;">
+            <button class="pagination-btn" id="firstPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">首页</button>
+            <button class="pagination-btn" id="prevPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">上一页</button>
+            <div class="page-numbers" id="pageNumbers" style="display: flex; gap: 4px;"></div>
+            <button class="pagination-btn" id="nextPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">下一页</button>
+            <button class="pagination-btn" id="lastPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">末页</button>
+        </div>
+        <div style="clear: both;"></div>
+    </div>
+</div>
+
+<div id="dataModal" class="modal-overlay">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3 id="modalTitle">新增菜单</h3>
+            <button class="modal-close" id="closeModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="dataForm">
+                <input type="hidden" id="editId" value="">
+                <div class="form-group">
+                    <label>菜单名称 <span style="color:#e03a3a;">*</span></label>
+                    <input type="text" id="menu_name" placeholder="例如：客户管理" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label>菜单地址 <span style="color:#e03a3a;">*</span></label>
+                    <input type="text" id="menu_url" placeholder="例如：/user/" maxlength="200">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>图标（Font Awesome 类名）</label>
+                        <input type="text" id="icon" placeholder="例如：fas fa-users" maxlength="50">
+                    </div>
+                    <div class="form-group">
+                        <label>分组名称</label>
+                        <input type="text" id="menu_group" placeholder="例如：业务管理" maxlength="50">
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>父菜单</label>
+                        <select id="parent_id">
+                            <option value="0">顶级菜单</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>排序号</label>
+                        <input type="number" id="sort_order" value="0" min="0">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>备注</label>
+                    <input type="text" id="remark" placeholder="可选备注" maxlength="200">
+                </div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" id="cancelModalBtn">取消</button>
+            <button type="button" class="btn-submit" id="submitBtn">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/sysmenu.js"></script>
+</body>
+</html>
