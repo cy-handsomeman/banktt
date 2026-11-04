@@ -21,7 +21,7 @@ function renderUserTable(users) {
             <tr data-id="${user.customer_id}">
                 <td>${user.customer_id}</td>
                 <td><strong>${escapeHtml(user.customer_name)}</strong></td>
-                <td>${pidDisplay}</td>
+                <td>${escapeHtml(pidDisplay)}</td>
                 <td>${escapeHtml(user.telephone || '—')}</td>
                 <td>${escapeHtml(user.address || '—')}</td>
                 <td class="action-buttons">

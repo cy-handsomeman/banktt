@@ -1,3 +1,114 @@
-from django.test import TestCase
+from django.contrib.auth.hashers import make_password
+from django.core.cache import cache
+from rest_framework.test import APIClient, APITestCase
 
-# Create your tests here.
+from apps.sys_user.authentication import SysUserPrincipal
+from apps.sys_user.models import SysUser
+from apps.sys_user_role.models import SysUserRole
+from apps.user_info.models import UserInfo
+
+ADMIN_ONLY_PATHS = (
+    '/api/sys_user/',
+    '/api/role/',
+    '/api/menu/',
+    '/api/role_menu/',
+    '/api/sys_user_role/',
+    '/api/login_log/',
+)
+
+
+class PermissionMatrixTests(APITestCase):
+    """角色权限矩阵与路由暴露面回归测试"""
+
+    def setUp(self):
+        cache.clear()
+        self.admin = self._make_user('test_admin', 1)
+        self.manager = self._make_user('test_manager', 2)
+        self.teller = self._make_user('test_teller', 3)
+
+        self.admin_client = APIClient()
+        self.admin_client.force_authenticate(user=SysUserPrincipal(self.admin))
+        self.manager_client = APIClient()
+        self.manager_client.force_authenticate(user=SysUserPrincipal(self.manager))
+        self.teller_client = APIClient()
+        self.teller_client.force_authenticate(user=SysUserPrincipal(self.teller))
+        self.anon_client = APIClient()
+
+    @staticmethod
+    def _make_user(user_name, role_id):
+        user = SysUser.objects.create(
+            user_name=user_name, pid=f'11010119900101{role_id:04d}', email=f'{user_name}@example.com',
+            mobile='13900000000', password=make_password('Test@12345'),
+        )
+        SysUserRole.objects.create(user_id=user.user_id, role_id=role_id)
+        return user
+
+    @staticmethod
+    def _rows(response):
+        data = response.data
+        if isinstance(data, dict) and 'results' in data:
+            return data['results']
+        return data
+
+    def test_admin_only_endpoints(self):
+        for path in ADMIN_ONLY_PATHS:
+            with self.subTest(path=path):
+                self.assertEqual(self.anon_client.get(path).status_code, 401)
+                self.assertEqual(self.admin_client.get(path).status_code, 200)
+                self.assertEqual(self.manager_client.get(path).status_code, 403)
+                self.assertEqual(self.teller_client.get(path).status_code, 403)
+
+    def test_business_read_allows_any_authenticated_role(self):
+        for client in (self.admin_client, self.manager_client, self.teller_client):
+            self.assertEqual(client.get('/api/user/').status_code, 200)
+            self.assertEqual(client.get('/api/card/').status_code, 200)
+            self.assertEqual(client.get('/api/trade/').status_code, 200)
+
+    def test_teller_can_create_but_not_delete_business_data(self):
+        payload = {
+            'customer_name': '李四',
+            'pid': '110101199001010099',
+            'telephone': '13700000000',
+            'address': '测试地址',
+        }
+        created = self.teller_client.post('/api/user/', payload, format='json')
+        self.assertEqual(created.status_code, 201)
+        customer_id = created.data['customer_id']
+
+        denied = self.teller_client.delete(f'/api/user/{customer_id}/')
+        self.assertEqual(denied.status_code, 403)
+        self.assertTrue(UserInfo.objects.filter(customer_id=customer_id).exists())
+
+        deleted = self.manager_client.delete(f'/api/user/{customer_id}/')
+        self.assertEqual(deleted.status_code, 204)
+        self.assertFalse(UserInfo.objects.filter(customer_id=customer_id).exists())
+
+    def test_page_prefix_no_longer_exposes_api_routes(self):
+        self.assertEqual(self.admin_client.get('/user/user/').status_code, 404)
+        self.assertEqual(self.admin_client.get('/sys_user/sys_user_list/').status_code, 404)
+        self.assertEqual(self.admin_client.get('/card/card/').status_code, 404)
+
+    def test_login_success_and_failure(self):
+        client = APIClient()
+        failed = client.post(
+            '/api/sys_user/login/',
+            {'userName': 'test_admin', 'password': 'wrong'},
+            format='json',
+        )
+        self.assertEqual(failed.status_code, 401)
+
+        success = client.post(
+            '/api/sys_user/login/',
+            {'userName': 'test_admin', 'password': 'Test@12345'},
+            format='json',
+        )
+        self.assertEqual(success.status_code, 200)
+        self.assertIn('access', success.data['data'])
+        self.assertIn('refresh', success.data['data'])
+        self.assertNotIn('password', success.data['data'])
+
+    def test_password_hash_never_exposed(self):
+        response = self.admin_client.get('/api/sys_user/')
+        self.assertEqual(response.status_code, 200)
+        for row in self._rows(response):
+            self.assertNotIn('password', row)

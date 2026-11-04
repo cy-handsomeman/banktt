@@ -1,8 +1,9 @@
 -- ============================================================
 -- banktt 银行后台管理系统 —— MySQL 8.0 初始化脚本
--- 生成依据：apps/*/models.py 中的 8 个模型（managed = False，数据库优先）
--- 用途：在新环境中创建 bank 库与 8 张业务表，使项目可以直接运行
+-- 生成依据：apps/*/models.py 中的 8 个模型（Django 迁移亦可用于建表）
+-- 用途：在新环境中创建 bank 库、8 张业务表与种子数据，使项目可以直接运行
 -- 用法：mysql -u root -p < sql/bank_init.sql
+--      随后执行 python manage.py migrate --fake-initial 登记初始迁移
 -- 说明：脚本可重复执行（CREATE TABLE IF NOT EXISTS），不会覆盖已有数据
 -- ============================================================
 
@@ -16,7 +17,7 @@ CREATE DATABASE IF NOT EXISTS `bank`
 USE `bank`;
 
 -- ------------------------------------------------------------
--- 1. sys_user 系统用户表（models.SysUser，managed = False）
+-- 1. sys_user 系统用户表（models.SysUser，managed = True）
 -- ------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `sys_user` (
     `user_id`     INT          NOT NULL AUTO_INCREMENT COMMENT '用户编号（标识列），从1开始，主键',

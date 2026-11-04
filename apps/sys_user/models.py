@@ -13,7 +13,7 @@ class SysUser(models.Model):
     update_time = models.DateTimeField(auto_now=True, blank=True, null=True, db_comment='更新时间，非必填')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'sys_user'
         db_table_comment = '系统用户表'
 
@@ -35,6 +35,6 @@ class SysLoginLog(models.Model):
     login_time = models.DateTimeField(db_comment='登录时间')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'sys_login_log'
         db_table_comment = '登录日志表'

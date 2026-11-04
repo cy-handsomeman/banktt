@@ -14,6 +14,6 @@ class CardInfo(models.Model):
     customer_id = models.IntegerField(db_comment='客户编号，外键关联user_info表')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'card_info'
         db_table_comment = '银行卡信息表'

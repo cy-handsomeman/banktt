@@ -1,8 +1,23 @@
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from rest_framework_simplejwt.authentication import JWTAuthentication
 from rest_framework_simplejwt.exceptions import AuthenticationFailed
 from rest_framework_simplejwt.settings import api_settings
 
 from apps.sys_user.models import SysUser
+
+
+class SysUserJWTAuthenticationScheme(OpenApiAuthenticationExtension):
+    """让 drf-spectacular 识别自定义 JWT 认证类，避免 schema 生成警告"""
+
+    target_class = 'apps.sys_user.authentication.SysUserJWTAuthentication'
+    name = 'jwtAuth'
+
+    def get_security_definition(self, auto_schema):
+        return {
+            'type': 'http',
+            'scheme': 'bearer',
+            'bearerFormat': 'JWT',
+        }
 
 
 class SysUserPrincipal:

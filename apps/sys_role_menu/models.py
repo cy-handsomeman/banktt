@@ -7,6 +7,6 @@ class SysRoleMenu(models.Model):
     menu_id = models.IntegerField(db_comment='菜单ID，关联sys_menu表')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'sys_role_menu'
         db_table_comment = '角色菜单关联表'

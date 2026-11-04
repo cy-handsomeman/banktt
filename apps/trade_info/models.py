@@ -21,6 +21,6 @@ class TradeInfo(models.Model):
     remark = models.CharField(max_length=200, blank=True, null=True, db_comment='备注，非必填')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'trade_info'
         db_table_comment = '交易信息表'

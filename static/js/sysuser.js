@@ -26,7 +26,7 @@ function renderUserTable(users) {
             <tr data-id="${user.user_id}">
                 <td>${user.user_id}</td>
                 <td><strong>${escapeHtml(user.user_name)}</strong></td>
-                <td>${pidDisplay}</td>
+                <td>${escapeHtml(pidDisplay)}</td>
                 <td>${escapeHtml(user.email || '—')}</td>
                 <td>${escapeHtml(user.mobile || '—')}</td>
                 <td>${escapeHtml(user.address || '—')}</td>

@@ -16,6 +16,6 @@ class SysMenu(models.Model):
     remark = models.CharField(max_length=200, blank=True, null=True, db_comment='备注，非必填')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'sys_menu'
         db_table_comment = '系统菜单表'

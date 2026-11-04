@@ -50,7 +50,7 @@ banktt/
 
 ### 第 1 步：准备数据库
 
-项目使用 8 张业务表 + 1 张登录日志表，所有模型均标记为 `managed = False`（数据库优先），**Django 不会自动建表**，必须先导入 `sql/bank_init.sql`。
+项目使用 8 张业务表 + 1 张登录日志表。模型已托管（`managed = True`）并生成初始迁移：可以用 `sql/bank_init.sql` 初始化数据库与种子数据，也可以用 `python manage.py migrate` 建表。
 
 **方式 A：命令行（推荐）**
 
@@ -78,6 +78,8 @@ SHOW TABLES;
 **默认账号：`admin` / `admin123`**（密码在库中以 PBKDF2 哈希保存，登录后请立即修改）。
 
 > 脚本使用 `CREATE TABLE IF NOT EXISTS` + `INSERT IGNORE`，可重复执行，不会清空已有数据。
+>
+> 如果已经用本脚本创建过表，首次还需执行 `python manage.py migrate --fake-initial`，把初始迁移登记为「已应用」（不会改动已有表结构）。
 
 ### 第 2 步：配置环境变量
 
@@ -138,6 +140,7 @@ pip install -r requirements.txt
 
 ```bash
 python manage.py check          # 配置自检，应输出 "no issues"
+python manage.py migrate        # 应用迁移（用 SQL 脚本建过表的旧库请加 --fake-initial）
 python manage.py seed           # 可选：为缺少菜单的角色补齐全部菜单、给无角色用户分配默认角色（可重复执行）
 python manage.py hash_passwords # 仅升级历史明文密码时使用，可加 --dry-run 预演
 python manage.py runserver      # 启动开发服务器
@@ -175,17 +178,17 @@ Starting development server at http://127.0.0.1:8000/
 
 ## 数据库说明（重要）
 
-本项目采用**数据库优先（database-first）**设计：
-
-- 8 个业务模型与登录日志模型都是 `managed = False`，Django 不会对它们建表、改表或删表；
-- 各应用的 `migrations/` 目录中只有 `__init__.py`，**没有任何迁移文件**；
-- 表结构的唯一来源是 `sql/bank_init.sql` 与真实 MySQL 数据库。
+- 8 个业务模型与登录日志模型均为 `managed = True`，表结构由 Django 迁移管理；
+- 各应用的 `migrations/0001_initial.py` 已纳入版本管理，可用于建表与结构演进；
+- `sql/bank_init.sql` 仍保留，用于初始化数据库与种子数据（`CREATE TABLE IF NOT EXISTS`，可重复执行）。
 
 因此：
 
-1. **不要执行** `python manage.py makemigrations` 来改动这些业务表；
-2. 需要调整表结构时，同时修改三处：MySQL 中的表 → 对应 `models.py` → `sql/bank_init.sql`；
-3. 换新环境时，只执行第 1 步导入 SQL 即可，无需 `migrate`。
+1. **旧库/本机已有表**：执行 `python manage.py migrate --fake-initial` 登记迁移，不会重建或改动表；
+2. **全新环境**：先创建 `bank` 数据库，执行 `python manage.py migrate` 建表，再按需导入 `sql/bank_init.sql` 的种子数据；也可以先导入 SQL，再执行 `migrate --fake-initial`；
+3. 需要调整表结构时：修改 `models.py` → `makemigrations` → `migrate`，并同步更新 `sql/bank_init.sql`。
+
+运行单元测试（测试库由迁移自动建表）：`python manage.py test`。
 
 ## 常见问题
 

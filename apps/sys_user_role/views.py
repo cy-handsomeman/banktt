@@ -1,8 +1,7 @@
-from django.shortcuts import render
-from django.db import IntegrityError
 from rest_framework import viewsets, status
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view
+from drf_spectacular.utils import extend_schema, OpenApiTypes
 from apps.sys_user_role.models import SysUserRole
 from apps.sys_user_role.serializers import SysUserRoleSerializer
 from apps.sys_role_menu.models import SysRoleMenu
@@ -13,10 +12,6 @@ from apps.sys_user.permissions import (
     SUPER_ADMIN_ROLE_ID,
     user_role_ids,
 )
-
-
-def sys_user_role_list(request):
-    return render(request, 'sys_user_role.html')
 
 
 # 菜单分组 / 图标全部来自 sys_menu 表，代码里不再维护任何 URL 映射
@@ -71,6 +66,7 @@ def _build_menu(menus):
     return user_menu
 
 
+@extend_schema(responses={200: OpenApiTypes.OBJECT})
 @api_view(['GET'])
 def check_super_admin(request):
     """
@@ -83,6 +79,7 @@ def check_super_admin(request):
     )
 
 
+@extend_schema(responses={200: OpenApiTypes.OBJECT})
 @api_view(['GET'])
 def get_user_menu(request):
     """

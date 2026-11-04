@@ -7,6 +7,6 @@ class SysRole(models.Model):
     description = models.CharField(max_length=200, blank=True, null=True, db_comment='角色描述，非必填')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'sys_role'
         db_table_comment = '系统角色表'

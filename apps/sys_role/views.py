@@ -1,5 +1,4 @@
 from django.db import transaction
-from django.shortcuts import render
 from rest_framework import viewsets
 from rest_framework.exceptions import ValidationError
 
@@ -8,10 +7,6 @@ from apps.sys_role.serializers import SysRoleSerializer
 from apps.sys_role_menu.models import SysRoleMenu
 from apps.sys_user.permissions import IsSuperAdmin
 from apps.sys_user_role.models import SysUserRole
-
-
-def sys_role_list(request):
-    return render(request, 'sys_role.html')
 
 
 class SysRoleViewSet(viewsets.ModelViewSet):

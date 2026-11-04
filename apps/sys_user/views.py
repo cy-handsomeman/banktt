@@ -16,11 +16,6 @@ from apps.sys_user.permissions import IsSuperAdmin
 from apps.sys_user_role.models import SysUserRole
 
 
-def sys_user_list(request):
-    users = SysUser.objects.all()
-    return render(request, 'sys_user.html', {'users': users})
-
-
 def login_log_list(request):
     return render(request, 'sys_login_log.html')
 

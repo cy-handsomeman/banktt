@@ -7,6 +7,12 @@ from django.shortcuts import render
 
 from apps.sys_user.views import login_log_list
 from apps.sys_menu.views import menu_list
+from apps.user_info.urls import page_urlpatterns as user_page_urlpatterns
+from apps.card_info.urls import page_urlpatterns as card_page_urlpatterns
+from apps.trade_info.urls import page_urlpatterns as trade_page_urlpatterns
+from apps.sys_role.urls import page_urlpatterns as role_page_urlpatterns
+from apps.sys_user.urls import page_urlpatterns as sys_user_page_urlpatterns
+from apps.sys_user_role.urls import page_urlpatterns as user_role_page_urlpatterns
 
 def index(request):
     return render(request, 'index.html')
@@ -17,12 +23,12 @@ def login(request):
 urlpatterns = [
     path('', index, name='index'),  # 首页直接返回 index.html
     path('login/', login, name='login'),  # 登录页面
-    path('user/', include('apps.user_info.urls')),  # user_info 独立首页
-    path('card/', include('apps.card_info.urls')),  # card_info 独立首页
-    path('trade/', include('apps.trade_info.urls')),  # trade_info 独立首页
-    path('role/', include('apps.sys_role.urls')),  # sys_role 独立首页
-    path('sys_user/', include('apps.sys_user.urls')),  # sys_user 独立首页
-    path('user_role/', include('apps.sys_user_role.urls')),  # sys_user_role 独立首页
+    path('user/', include(user_page_urlpatterns)),  # user_info 独立首页
+    path('card/', include(card_page_urlpatterns)),  # card_info 独立首页
+    path('trade/', include(trade_page_urlpatterns)),  # trade_info 独立首页
+    path('role/', include(role_page_urlpatterns)),  # sys_role 独立首页
+    path('sys_user/', include(sys_user_page_urlpatterns)),  # sys_user 独立首页
+    path('user_role/', include(user_role_page_urlpatterns)),  # sys_user_role 独立首页
     path('menu/', menu_list, name='menu_index'),  # 菜单管理首页
     path('login_log/', login_log_list, name='login_log_index'),  # 登录日志首页
     path('api/', include('apps.user_info.urls')),

@@ -1,7 +1,6 @@
 from decimal import Decimal
 
 from django.db import transaction
-from django.shortcuts import render
 from django.utils import timezone
 from rest_framework import viewsets
 from rest_framework.decorators import action
@@ -19,10 +18,6 @@ from apps.trade_info.serializers import (
     TRANSFER_TRANS_TYPES,
     TradeInfoSerializer,
 )
-
-
-def trade_info_list(request):
-    return render(request, 'trade_info.html')
 
 
 def _signed_amount(trade):

@@ -250,17 +250,7 @@ SPECTACULAR_SETTINGS = {
     # 文档接口白名单：无需 token 即可访问 schema / swagger
     'SERVE_PERMISSIONS': ['rest_framework.permissions.AllowAny'],
     'SERVE_AUTHENTICATION': [],
-    # 声明 Bearer 认证方案，Swagger 页面才会出现 Authorize 按钮
-    'COMPONENTS': {
-        'securitySchemes': {
-            'jwtAuth': {
-                'type': 'http',
-                'scheme': 'bearer',
-                'bearerFormat': 'JWT',
-            },
-        },
-    },
-    'SECURITY': [{'jwtAuth': []}],
+    # Bearer 认证方案由 SysUserJWTAuthenticationScheme 扩展自动声明
 }
 
 # simplejwt 配置（适配 sys_user 表：主键字段为 user_id）

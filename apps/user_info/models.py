@@ -10,6 +10,6 @@ class UserInfo(models.Model):
     address = models.CharField(max_length=200, blank=True, null=True, db_comment='居住地址，非必填')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'user_info'
         db_table_comment = '客户信息表'

@@ -7,7 +7,7 @@ class SysUserRole(models.Model):
     role_id = models.IntegerField(db_comment='角色ID，关联sys_role表')
 
     class Meta:
-        managed = False
+        managed = True
         db_table = 'sys_user_role'
         db_table_comment = '用户角色关联表'
         unique_together = ('user_id', 'role_id')  # 防止重复关联
