@@ -626,8 +626,9 @@
         // 退出登录
         function logout() {
             if (confirm('确定要退出登录吗？')) {
-                // 退出时清空会话数据（token、用户名、用户ID）
+                // 退出时清空会话数据（token、用户名、用户ID）与页面鉴权 Cookie
                 sessionStorage.clear();
+                document.cookie = 'page_token=; path=/; max-age=0; SameSite=Lax';
 
                 // 更新用户信息显示
                 updateUserNameDisplay(null);

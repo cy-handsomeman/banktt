@@ -13,6 +13,8 @@
 
     function clearAndRedirect() {
         sessionStorage.clear();
+        // 同步清除页面鉴权 Cookie，避免会话失效后仍能打开管理页面
+        document.cookie = 'page_token=; path=/; max-age=0; SameSite=Lax';
         window.location.href = '/login/';
     }
 

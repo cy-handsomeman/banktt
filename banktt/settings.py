@@ -92,6 +92,8 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    # 页面级鉴权：未携带合法 page_token Cookie 时，管理页面统一跳转登录页
+    'banktt.middleware.PageAuthMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',  # 同源 iframe 可用，跨站禁止嵌套
 ]

@@ -161,6 +161,10 @@
                             sessionStorage.setItem('user_name', res.data.user_name);
                             sessionStorage.setItem('access_token', res.data.access);
                             sessionStorage.setItem('refresh_token', res.data.refresh);
+                            // 页面层鉴权 Cookie：服务端据此放行 HTML 页面，有效期与 refresh token 一致
+                            var secure = location.protocol === 'https:' ? '; Secure' : '';
+                            document.cookie = 'page_token=' + encodeURIComponent(res.data.refresh)
+                                + '; path=/; max-age=86400; SameSite=Lax' + secure;
                             setTimeout(function() {
                                 window.location.href = '/';
                             }, 500);
