@@ -58,6 +58,12 @@ ALLOWED_HOSTS = [host.strip() for host in os.environ.get('DJANGO_ALLOWED_HOSTS',
 if not ALLOWED_HOSTS and DEBUG:
     ALLOWED_HOSTS = ['127.0.0.1', 'localhost']
 
+# 只有来自这些反向代理/负载均衡地址的请求才信任 X-Forwarded-For，
+# 留空表示直连部署，任何客户端伪造的 XFF 都会被忽略
+TRUSTED_PROXY_IPS = [
+    ip.strip() for ip in os.environ.get('TRUSTED_PROXY_IPS', '').split(',') if ip.strip()
+]
+
 # 允许同源 iframe 嵌套，同时开启防点击劫持
 X_FRAME_OPTIONS = 'SAMEORIGIN'
 

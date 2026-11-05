@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.shortcuts import render
 from django.contrib.auth.hashers import check_password
 from django.db import transaction
@@ -14,6 +15,7 @@ from apps.sys_user.models import SysLoginLog, SysUser
 from apps.sys_user.serializers import SysLoginLogSerializer, SysUserSerializer
 from apps.sys_user.permissions import IsSuperAdmin
 from apps.sys_user_role.models import SysUserRole
+from banktt.middleware import PAGE_TOKEN_COOKIE
 
 
 def login_log_list(request):
@@ -21,10 +23,12 @@ def login_log_list(request):
 
 
 def _client_ip(request):
+    """仅当请求来自受信代理时才采用 X-Forwarded-For，避免客户端伪造来源 IP"""
+    remote_addr = request.META.get('REMOTE_ADDR') or ''
     forwarded = request.META.get('HTTP_X_FORWARDED_FOR')
-    if forwarded:
+    if forwarded and remote_addr in getattr(settings, 'TRUSTED_PROXY_IPS', ()):
         return forwarded.split(',')[0].strip()
-    return request.META.get('REMOTE_ADDR') or ''
+    return remote_addr
 
 
 def _write_login_log(request, user, user_name, success, message):
@@ -111,7 +115,7 @@ class SysUserViewSet(viewsets.ModelViewSet):
 
         _write_login_log(request, user, user_name, True, '登录成功')
         refresh = RefreshToken.for_user(user)
-        return Response(
+        response = Response(
             {
                 'code': 0,
                 'message': '登录成功',
@@ -124,3 +128,27 @@ class SysUserViewSet(viewsets.ModelViewSet):
             },
             status=status.HTTP_200_OK
         )
+        # 页面鉴权 Cookie 由服务端下发并标记 HttpOnly，前端无法读取或篡改
+        response.set_cookie(
+            PAGE_TOKEN_COOKIE,
+            str(refresh),
+            max_age=int(settings.SIMPLE_JWT['REFRESH_TOKEN_LIFETIME'].total_seconds()),
+            path='/',
+            httponly=True,
+            samesite='Lax',
+            secure=request.is_secure(),
+        )
+        return response
+
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='logout',
+        permission_classes=[AllowAny],   # 退出登录不要求 token 仍然有效
+        authentication_classes=[],
+    )
+    def logout(self, request):
+        """退出登录：清除服务端下发的 HttpOnly 页面鉴权 Cookie"""
+        response = Response({'detail': '已退出登录'}, status=status.HTTP_200_OK)
+        response.delete_cookie(PAGE_TOKEN_COOKIE, path='/')
+        return response

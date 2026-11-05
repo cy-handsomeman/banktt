@@ -153,3 +153,29 @@ class FundFlowTests(APITestCase):
         teller_client.force_authenticate(user=SysUserPrincipal(self.teller))
         response = teller_client.post(f'/api/trade/{out_trade.tid}/reverse/', {}, format='json')
         self.assertEqual(response.status_code, 403)
+
+    def test_reversal_rejected_when_card_closed(self):
+        """销户卡不能冲正，否则会把余额重新记回已关闭账户"""
+        deposit = self.client.post(
+            '/api/trade/',
+            {'trans_type': '存款', 'card_id': CARD_A, 'trans_money': '50.00'},
+            format='json',
+        )
+        self.assertEqual(deposit.status_code, 201)
+        tid = deposit.data['tid']
+
+        withdraw = self.client.post(
+            '/api/trade/',
+            {'trans_type': '取款', 'card_id': CARD_A, 'trans_money': str(self._balance(CARD_A))},
+            format='json',
+        )
+        self.assertEqual(withdraw.status_code, 201)
+        self.assertEqual(self._balance(CARD_A), Decimal('0.00'))
+
+        closed = self.client.post(f'/api/card/{CARD_A}/close/', {}, format='json')
+        self.assertEqual(closed.status_code, 200)
+
+        response = self.client.post(f'/api/trade/{tid}/reverse/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('销户', str(response.data.get('detail')))
+        self.assertEqual(self._balance(CARD_A), Decimal('0.00'))

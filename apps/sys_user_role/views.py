@@ -1,4 +1,6 @@
+from django.db import transaction
 from rest_framework import viewsets, status
+from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
 from rest_framework.decorators import action, api_view
 from drf_spectacular.utils import extend_schema, OpenApiTypes
@@ -17,6 +19,37 @@ from apps.sys_user.permissions import (
 # 菜单分组 / 图标全部来自 sys_menu 表，代码里不再维护任何 URL 映射
 DEFAULT_GROUP = '其他'
 DEFAULT_ICON = 'fas fa-circle'
+
+
+def _to_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _super_admin_user_ids():
+    return set(
+        SysUserRole.objects.filter(role_id=SUPER_ADMIN_ROLE_ID)
+        .values_list('user_id', flat=True)
+    )
+
+
+def _guard_super_admin_removal(request, user_ids, removing_super_admin):
+    """保护超管绑定：不能移除自己的，也不能让系统失去最后一名超管"""
+    if not removing_super_admin:
+        return
+    targets = set()
+    for user_id in user_ids:
+        parsed = _to_int(user_id)
+        if parsed is None:
+            raise ValidationError({'detail': '用户ID格式不正确'})
+        targets.add(parsed)
+    if request.user.pk in targets:
+        raise ValidationError({'detail': '不能移除自己的超级管理员角色'})
+    remaining = _super_admin_user_ids() - targets
+    if not remaining:
+        raise ValidationError({'detail': '系统必须保留至少一名超级管理员'})
 
 
 def _normalize_url(url):
@@ -130,15 +163,12 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
         获取用户拥有的角色列表
         GET /api/user_role/user/{user_id}/
         """
-        try:
-            user_roles = SysUserRole.objects.filter(user_id=user_id)
-            serializer = self.get_serializer(user_roles, many=True)
-            return Response({'user_id': user_id, 'roles': serializer.data})
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        parsed_user_id = _to_int(user_id)
+        if parsed_user_id is None:
+            raise ValidationError({'detail': '用户ID格式不正确'})
+        user_roles = SysUserRole.objects.filter(user_id=parsed_user_id)
+        serializer = self.get_serializer(user_roles, many=True)
+        return Response({'user_id': parsed_user_id, 'roles': serializer.data})
 
     @action(detail=False, methods=['get'], url_path='role/(?P<role_id>[^/.]+)')
     def get_role_users(self, request, role_id=None):
@@ -146,15 +176,12 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
         查询角色关联的用户列表
         GET /api/user_role/role/{role_id}/
         """
-        try:
-            role_users = SysUserRole.objects.filter(role_id=role_id)
-            serializer = self.get_serializer(role_users, many=True)
-            return Response({'role_id': role_id, 'users': serializer.data})
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        parsed_role_id = _to_int(role_id)
+        if parsed_role_id is None:
+            raise ValidationError({'detail': '角色ID格式不正确'})
+        role_users = SysUserRole.objects.filter(role_id=parsed_role_id)
+        serializer = self.get_serializer(role_users, many=True)
+        return Response({'role_id': parsed_role_id, 'users': serializer.data})
 
     @action(detail=False, methods=['get'], url_path='check')
     def check_user_role(self, request):
@@ -162,27 +189,17 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
         判断用户是否拥有特定角色
         GET /api/user_role/check?user_id={user_id}&role_id={role_id}
         """
-        try:
-            user_id = request.query_params.get('user_id')
-            role_id = request.query_params.get('role_id')
-            
-            if not user_id or not role_id:
-                return Response(
-                    {'error': '缺少参数 user_id 或 role_id'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
-            exists = SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists()
-            return Response({
-                'user_id': user_id,
-                'role_id': role_id,
-                'has_role': exists
-            })
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        user_id = _to_int(request.query_params.get('user_id'))
+        role_id = _to_int(request.query_params.get('role_id'))
+        if user_id is None or role_id is None:
+            raise ValidationError({'detail': '缺少参数 user_id 或 role_id，且必须为整数'})
+
+        exists = SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists()
+        return Response({
+            'user_id': user_id,
+            'role_id': role_id,
+            'has_role': exists
+        })
 
     @action(detail=False, methods=['post'], url_path='batch_remove')
     def batch_remove_roles(self, request):
@@ -194,30 +211,31 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
             "role_id": 1
         }
         """
-        try:
-            user_ids = request.data.get('user_ids', [])
-            role_id = request.data.get('role_id')
-            
-            if not user_ids or not role_id:
-                return Response(
-                    {'error': '缺少参数 user_ids 或 role_id'},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
-            
+        user_ids = request.data.get('user_ids') or []
+        role_id = _to_int(request.data.get('role_id'))
+        if not user_ids or role_id is None:
+            raise ValidationError(
+                {'detail': '缺少参数 user_ids 或 role_id，且 role_id 必须为整数'}
+            )
+
+        parsed_user_ids = [_to_int(user_id) for user_id in user_ids]
+        if any(user_id is None for user_id in parsed_user_ids):
+            raise ValidationError({'detail': '用户ID格式不正确'})
+
+        _guard_super_admin_removal(
+            request, parsed_user_ids, role_id == SUPER_ADMIN_ROLE_ID
+        )
+
+        with transaction.atomic():
             deleted_count, _ = SysUserRole.objects.filter(
-                user_id__in=user_ids,
+                user_id__in=parsed_user_ids,
                 role_id=role_id
             ).delete()
-            
-            return Response({
-                'deleted': deleted_count,
-                'message': f'成功移除 {deleted_count} 个角色关联'
-            })
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+
+        return Response({
+            'deleted': deleted_count,
+            'message': f'成功移除 {deleted_count} 个角色关联'
+        })
 
     @action(detail=False, methods=['post'], url_path='user/(?P<user_id>[^/.]+)/clear')
     def remove_user_all_roles(self, request, user_id=None):
@@ -225,30 +243,47 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
         清空用户的所有角色
         POST /api/user_role/user/{user_id}/clear/
         """
-        try:
-            deleted_count, _ = SysUserRole.objects.filter(user_id=user_id).delete()
-            return Response({
-                'deleted': deleted_count,
-                'message': f'成功移除用户 {user_id} 的 {deleted_count} 个角色'
-            })
-        except Exception as e:
-            return Response(
-                {'error': str(e)},
-                status=status.HTTP_400_BAD_REQUEST
-            )
+        parsed_user_id = _to_int(user_id)
+        if parsed_user_id is None:
+            raise ValidationError({'detail': '用户ID格式不正确'})
+
+        # 清空角色必然包含超管角色，同样需要防止把自己或最后一名超管移除
+        _guard_super_admin_removal(request, [parsed_user_id], True)
+
+        with transaction.atomic():
+            deleted_count, _ = SysUserRole.objects.filter(user_id=parsed_user_id).delete()
+        return Response({
+            'deleted': deleted_count,
+            'message': f'成功移除用户 {parsed_user_id} 的 {deleted_count} 个角色'
+        })
+
+    def perform_destroy(self, instance):
+        """单独删除某个角色绑定时，也要保护超管绑定"""
+        _guard_super_admin_removal(
+            self.request,
+            [instance.user_id],
+            instance.role_id == SUPER_ADMIN_ROLE_ID
+        )
+        with transaction.atomic():
+            instance.delete()
 
     def create(self, request, *args, **kwargs):
         """
         单个角色分配（重写以处理重复关联）
         """
-        user_id = request.data.get('user_id')
-        role_id = request.data.get('role_id')
-        
+        user_id = _to_int(request.data.get('user_id'))
+        role_id = _to_int(request.data.get('role_id'))
+        if user_id is None or role_id is None:
+            return Response(
+                {'detail': 'user_id 与 role_id 必须为整数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # 先检查是否已存在
         if SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists():
             return Response(
-                {'error': '该用户已拥有此角色'},
+                {'detail': '该用户已拥有此角色'},
                 status=status.HTTP_409_CONFLICT
             )
-        
+
         return super().create(request, *args, **kwargs)

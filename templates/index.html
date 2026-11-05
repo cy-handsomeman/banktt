@@ -645,19 +645,22 @@
         // 退出登录
         function logout() {
             if (confirm('确定要退出登录吗？')) {
-                // 退出时清空会话数据（token、用户名、用户ID）与页面鉴权 Cookie
                 sessionStorage.clear();
-                document.cookie = 'page_token=; path=/; max-age=0; SameSite=Lax';
+                // 页面鉴权 Cookie 是 HttpOnly，只能由后端清除
+                $.ajax({
+                    url: '/api/sys_user/logout/',
+                    method: 'POST'
+                }).always(function() {
+                    // 更新用户信息显示
+                    updateUserNameDisplay(null);
+                    updateRoleDisplay('无角色');
+                    renderEmptyMenu('已退出登录');
 
-                // 更新用户信息显示
-                updateUserNameDisplay(null);
-                updateRoleDisplay('无角色');
-                renderEmptyMenu('已退出登录');
+                    showToast('已成功退出登录', 1200);
 
-                showToast('已成功退出登录', 1200);
-
-                // 退出后必须离开工作台，否则仍能看到上一个账号的页面内容
-                setTimeout(function() { window.location.href = '/login/'; }, 300);
+                    // 退出后必须离开工作台，否则仍能看到上一个账号的页面内容
+                    setTimeout(function() { window.location.href = '/login/'; }, 300);
+                });
             }
         }
 

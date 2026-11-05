@@ -3,7 +3,7 @@ from django.core.cache import cache
 from rest_framework.test import APIClient, APITestCase
 
 from apps.sys_user.authentication import SysUserPrincipal
-from apps.sys_user.models import SysUser
+from apps.sys_user.models import SysLoginLog, SysUser
 from apps.sys_user_role.models import SysUserRole
 from apps.user_info.models import UserInfo
 
@@ -112,3 +112,33 @@ class PermissionMatrixTests(APITestCase):
         self.assertEqual(response.status_code, 200)
         for row in self._rows(response):
             self.assertNotIn('password', row)
+
+    def test_login_sets_httponly_page_token_and_logout_clears_cookie(self):
+        client = APIClient()
+        response = client.post(
+            '/api/sys_user/login/',
+            {'userName': 'test_admin', 'password': 'Test@12345'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        cookie = response.cookies.get('page_token')
+        self.assertIsNotNone(cookie)
+        self.assertTrue(cookie.get('httponly'))
+        self.assertEqual(cookie.get('samesite'), 'Lax')
+        self.assertEqual(client.get('/').status_code, 200)
+
+        logout = client.post('/api/sys_user/logout/')
+        self.assertEqual(logout.status_code, 200)
+        self.assertEqual(logout.cookies['page_token'].get('max-age'), 0)
+        self.assertEqual(client.get('/').status_code, 302)
+
+    def test_forwarded_for_is_ignored_for_untrusted_client(self):
+        client = APIClient()
+        client.post(
+            '/api/sys_user/login/',
+            {'userName': 'test_admin', 'password': 'Test@12345'},
+            format='json',
+            HTTP_X_FORWARDED_FOR='8.8.8.8',
+        )
+        log = SysLoginLog.objects.order_by('-id').first()
+        self.assertNotEqual(log.login_ip, '8.8.8.8')

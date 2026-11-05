@@ -10,3 +10,4 @@ class SysRoleMenu(models.Model):
         managed = True
         db_table = 'sys_role_menu'
         db_table_comment = '角色菜单关联表'
+        unique_together = ('role_id', 'menu_id')  # 防止重复授权
