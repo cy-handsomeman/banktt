@@ -541,12 +541,15 @@
             
             userPermissions.menu.forEach((group, groupIndex) => {
                 const isLocked = group.locked || false;
+                // 展开高度按菜单项数量计算，避免固定 200px 裁掉第 5 项以后的菜单
+                const expandedHeight = Math.max(200, group.items.length * 51 + 10);
                 html += `
                     <div class="nav-group">
                         <div class="nav-group-title ${isLocked ? 'locked' : ''}" data-group-index="${groupIndex}" data-locked="${isLocked}">
                             ${escapeHtml(group.group)}${isLocked ? ' <i class="fas fa-lock" style="font-size: 0.7rem; margin-left: 4px;"></i>' : ''}
                         </div>
-                        <div class="nav-group-content ${isLocked ? 'collapsed locked' : 'expanded'}">
+                        <div class="nav-group-content ${isLocked ? 'collapsed locked' : 'expanded'}"
+                             data-expanded-height="${expandedHeight}"${isLocked ? '' : ` style="max-height:${expandedHeight}px"`}>
                 `;
                 group.items.forEach(item => {
                     html += `
@@ -574,12 +577,14 @@
                 
                 const content = $(this).next('.nav-group-content');
                 
-                // 切换状态
+                // 切换状态（高度由内联样式驱动，需同步更新）
                 if (content.hasClass('expanded')) {
                     content.removeClass('expanded').addClass('collapsed');
+                    content.css('max-height', '0px');
                     $(this).addClass('collapsed');
                 } else {
                     content.removeClass('collapsed').addClass('expanded');
+                    content.css('max-height', content.attr('data-expanded-height') + 'px');
                     $(this).removeClass('collapsed');
                 }
             });
