@@ -16,13 +16,13 @@ from apps.sys_user.models import SysUser
 # 需要登录后才能访问的页面路径（登录页、接口文档、静态资源不在其中）
 PROTECTED_PAGE_PATHS = frozenset({
     '/',
+    '/dashboard/',
     '/user/',
     '/card/',
     '/trade/',
+    '/transactions/',
     '/sys_user/',
     '/role/',
-    '/user_role/',
-    '/menu/',
     '/login_log/',
 })
 

@@ -47,10 +47,10 @@ def _guard_super_admin_removal(request, user_ids, removing_super_admin):
             raise ValidationError({'detail': '用户ID格式不正确'})
         targets.add(parsed)
     if request.user.pk in targets:
-        raise ValidationError({'detail': '不能移除自己的超级管理员角色'})
+        raise ValidationError({'detail': '不能移除自己的管理员角色'})
     remaining = _super_admin_user_ids() - targets
     if not remaining:
-        raise ValidationError({'detail': '系统必须保留至少一名超级管理员'})
+        raise ValidationError({'detail': '系统必须保留至少一名管理员'})
 
 
 def _normalize_url(url):

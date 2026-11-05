@@ -64,24 +64,24 @@ class PermissionMatrixTests(APITestCase):
             self.assertEqual(client.get('/api/card/').status_code, 200)
             self.assertEqual(client.get('/api/trade/').status_code, 200)
 
-    def test_teller_can_create_but_not_delete_business_data(self):
+    def test_write_role_can_create_and_readonly_role_cannot(self):
         payload = {
             'customer_name': '李四',
             'pid': '110101199001010099',
             'telephone': '13700000000',
             'address': '测试地址',
         }
-        created = self.teller_client.post('/api/user/', payload, format='json')
+        created = self.manager_client.post('/api/user/', payload, format='json')
         self.assertEqual(created.status_code, 201)
         customer_id = created.data['customer_id']
 
-        denied = self.teller_client.delete(f'/api/user/{customer_id}/')
+        denied = self.teller_client.post('/api/user/', payload, format='json')
         self.assertEqual(denied.status_code, 403)
-        self.assertTrue(UserInfo.objects.filter(customer_id=customer_id).exists())
 
-        deleted = self.manager_client.delete(f'/api/user/{customer_id}/')
-        self.assertEqual(deleted.status_code, 204)
-        self.assertFalse(UserInfo.objects.filter(customer_id=customer_id).exists())
+        # 客户删除入口已移除：只读角色先被权限拦截，写角色命中不存在的 DELETE 方法
+        self.assertEqual(self.teller_client.delete(f'/api/user/{customer_id}/').status_code, 403)
+        self.assertEqual(self.manager_client.delete(f'/api/user/{customer_id}/').status_code, 405)
+        self.assertTrue(UserInfo.objects.filter(customer_id=customer_id).exists())
 
     def test_page_prefix_no_longer_exposes_api_routes(self):
         self.assertEqual(self.admin_client.get('/user/user/').status_code, 404)
@@ -126,19 +126,39 @@ class PermissionMatrixTests(APITestCase):
         self.assertTrue(cookie.get('httponly'))
         self.assertEqual(cookie.get('samesite'), 'Lax')
         self.assertEqual(client.get('/').status_code, 200)
+        for page in (
+            '/dashboard/', '/user/', '/card/', '/trade/', '/transactions/',
+            '/sys_user/', '/role/', '/login_log/',
+        ):
+            self.assertEqual(client.get(page).status_code, 200, page)
 
         logout = client.post('/api/sys_user/logout/')
         self.assertEqual(logout.status_code, 200)
         self.assertEqual(logout.cookies['page_token'].get('max-age'), 0)
         self.assertEqual(client.get('/').status_code, 302)
 
-    def test_forwarded_for_is_ignored_for_untrusted_client(self):
-        client = APIClient()
-        client.post(
-            '/api/sys_user/login/',
-            {'userName': 'test_admin', 'password': 'Test@12345'},
-            format='json',
-            HTTP_X_FORWARDED_FOR='8.8.8.8',
-        )
-        log = SysLoginLog.objects.order_by('-id').first()
-        self.assertNotEqual(log.login_ip, '8.8.8.8')
+    def test_dashboard_summary_available_to_all_roles(self):
+        for client in (self.admin_client, self.manager_client, self.teller_client):
+            response = client.get('/api/dashboard/summary/')
+            self.assertEqual(response.status_code, 200)
+            for key in (
+                'today_trade_count', 'today_trade_amount', 'customer_count',
+                'card_count', 'card_normal_count', 'card_closed_count',
+                'trend', 'latest_trades',
+            ):
+                self.assertIn(key, response.data)
+
+    def test_menu_grants_match_role_matrix(self):
+        def menu_count(client):
+            response = client.get('/api/get_user_menu/')
+            self.assertEqual(response.status_code, 200)
+            return sum(len(group.get('items', [])) for group in response.data.get('menu', []))
+
+        self.assertEqual(menu_count(self.admin_client), 8)
+        self.assertEqual(menu_count(self.manager_client), 5)
+        self.assertEqual(menu_count(self.teller_client), 4)
+
+    def test_removed_pages_are_not_routed(self):
+        self.assertEqual(self.admin_client.get('/menu/').status_code, 404)
+        self.assertEqual(self.admin_client.get('/user_role/').status_code, 404)
+

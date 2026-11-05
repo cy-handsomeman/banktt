@@ -3,87 +3,114 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>系统角色管理</title>
+    <title>角色与权限</title>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/sysrole.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <style>
+        .role-layout { display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 15px; margin-bottom: 15px; }
+        .panel-body { padding: 15px 17px; }
+        .panel-title .btn { padding: 6px 11px; font-size: 11px; }
+        .role-table td, .role-table th { padding: 10px 13px; }
+        .role-row { cursor: pointer; }
+        .role-row.selected td { background: #eef5fa; }
+        .role-row.selected strong { color: #2b6795; }
+        .permission-head { display: flex; align-items: center; justify-content: space-between; padding: 14px 17px; border-bottom: 1px solid #eef0f2; }
+        .permission-head h2 { font-size: 14px; margin: 0; }
+        .permission-head small { color: #8994a0; font-size: 11px; margin-left: 7px; }
+        .member-form { display: flex; gap: 9px; align-items: flex-end; padding: 14px 17px; border-bottom: 1px solid #eef0f2; flex-wrap: wrap; }
+        .member-form select { height: 34px; border: 1px solid #d8dee5; border-radius: 6px; padding: 0 10px; font: inherit; font-size: 12px; min-width: 190px; color: var(--ink); background: #fff; }
+        .empty-tip { padding: 26px 17px; color: var(--muted); font-size: 12px; text-align: center; }
+        @media (max-width: 1000px) { .role-layout { grid-template-columns: 1fr; } }
+    </style>
 </head>
 <body>
 <div class="manager">
     <div class="header">
-        <h1><i class="fas fa-shield-alt" style="margin-right: 12px;"></i>系统角色管理</h1>
+        <h1><i class="fas fa-shield-alt"></i>角色与权限</h1>
         <div class="header-right">
             <button class="btn-refresh" id="refreshBtn"><i class="fas fa-sync-alt"></i> 刷新</button>
-            <button class="btn-add" id="openAddModalBtn"><i class="fas fa-plus"></i> 新增角色</button>
         </div>
     </div>
-    <div class="table-wrapper">
-        <table class="data-table" id="dataTable">
+    <div class="alert">
+        <i class="fas fa-circle-info"></i>
+        在左侧选择角色，右侧勾选可访问菜单并保存；下方可维护该角色的成员。管理员角色默认拥有全部权限。
+    </div>
+
+    <div class="role-layout">
+        <div class="panel">
+            <div class="panel-title">
+                <h2>角色列表</h2>
+                <button class="btn primary" id="openAddModalBtn"><i class="fas fa-plus"></i> 新建角色</button>
+            </div>
+            <table class="role-table">
+                <thead>
+                    <tr><th>ID</th><th>角色名称</th><th>描述</th><th width="82">操作</th></tr>
+                </thead>
+                <tbody id="roleTableBody">
+                    <tr class="empty-row"><td colspan="4">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="panel">
+            <div class="permission-head">
+                <h2>菜单授权 <small id="selectedRoleName">未选择角色</small></h2>
+                <button class="btn primary" id="saveMenuBtn" disabled><i class="fas fa-check"></i> 保存授权</button>
+            </div>
+            <div class="panel-body" id="menuGroups">
+                <div class="empty-tip">请先在左侧选择角色</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-title">
+            <h2>角色成员 <span id="memberRoleLabel" style="font-weight:400;color:#8994a0;font-size:12px;"></span></h2>
+            <span id="memberCount">0 人</span>
+        </div>
+        <div class="member-form">
+            <div>
+                <label style="display:block;font-size:11px;color:#768391;margin-bottom:5px;">添加成员</label>
+                <select id="userSelect">
+                    <option value="">请选择系统用户</option>
+                </select>
+            </div>
+            <button class="btn primary" id="addMemberBtn"><i class="fas fa-user-plus"></i> 添加</button>
+        </div>
+        <table class="data-table">
             <thead>
-                <tr>
-                    <th>角色ID</th><th>角色名称</th><th>角色描述</th><th width="150">操作</th>
-                </tr>
+                <tr><th width="90">用户 ID</th><th>用户名</th><th>角色</th><th width="80">操作</th></tr>
             </thead>
-            <tbody id="dataTableBody">
-                <tr class="empty-row"><td colspan="4">加载中...</td></tr>
+            <tbody id="memberTableBody">
+                <tr class="empty-row"><td colspan="4">请先选择角色</td></tr>
             </tbody>
         </table>
-    </div>
-    <div class="pagination-wrapper" id="paginationWrapper" style="display: none; margin-top: 20px;">
-        <div class="pagination-info" style="float: left; font-size: 0.85rem; color: #6b7280;">
-            共 <span id="totalCount">0</span> 条数据，当前第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
-        </div>
-        <div class="pagination" style="float: right; display: flex; align-items: center; gap: 6px;">
-            <button class="pagination-btn" id="firstPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">首页</button>
-            <button class="pagination-btn" id="prevPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">上一页</button>
-            <div class="page-numbers" id="pageNumbers" style="display: flex; gap: 4px;"></div>
-            <button class="pagination-btn" id="nextPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">下一页</button>
-            <button class="pagination-btn" id="lastPageBtn" style="padding: 6px 12px; border: 1px solid #e5e7eb; border-radius: 6px; background: white; cursor: pointer; font-size: 0.85rem; color: #374151;">末页</button>
-        </div>
-        <div style="clear: both;"></div>
     </div>
 </div>
 
 <div id="dataModal" class="modal-overlay">
     <div class="modal-container">
         <div class="modal-header">
-            <h3 id="modalTitle">新增角色</h3>
+            <h3 id="modalTitle">新建角色</h3>
             <button class="modal-close" id="closeModalBtn">&times;</button>
         </div>
         <div class="modal-body">
             <form id="dataForm">
-                <input type="hidden" id="editId" value="">
                 <div class="form-group">
                     <label>角色名称 <span style="color:#e03a3a;">*</span></label>
-                    <input type="text" id="role_name" placeholder="请输入角色名称" maxlength="100">
+                    <input type="text" id="role_name" maxlength="50" placeholder="请输入角色名称">
                 </div>
                 <div class="form-group">
                     <label>角色描述</label>
-                    <textarea id="description" placeholder="请输入角色描述（可选）" rows="3"></textarea>
+                    <input type="text" id="description" maxlength="200" placeholder="可选">
                 </div>
+                <input type="hidden" id="editId">
             </form>
         </div>
         <div class="modal-footer">
             <button type="button" class="btn-cancel" id="cancelModalBtn">取消</button>
             <button type="button" class="btn-submit" id="submitBtn">保存</button>
-        </div>
-    </div>
-</div>
-
-<div id="menuModal" class="modal-overlay">
-    <div class="modal-container" style="max-width: 600px;">
-        <div class="modal-header">
-            <h3 id="menuModalTitle">分配菜单权限</h3>
-            <button class="modal-close" id="closeMenuModalBtn">&times;</button>
-        </div>
-        <div class="modal-body">
-            <input type="hidden" id="menuRoleId" value="">
-            <!-- 菜单分组完全由 sys_menu.menu_group 决定，前端不再写死分组 -->
-            <div id="menuGroups"></div>
-        </div>
-        <div class="modal-footer">
-            <button type="button" class="btn-cancel" id="cancelMenuModalBtn">取消</button>
-            <button type="button" class="btn-submit" id="saveMenuBtn">保存</button>
         </div>
     </div>
 </div>

@@ -3,117 +3,193 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>登录 - 银行管理系统</title>
+    <title>登录 · 银行柜面业务管理平台</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #1a3a5c 0%, #2c5a87 100%);
+            font-family: 'Segoe UI', 'Microsoft YaHei', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #16324f 0%, #245075 55%, #2f648c 100%);
             min-height: 100vh;
             display: flex;
+            align-items: center;
             justify-content: center;
-            align-items: center;
+            padding: 24px;
+            color: #263445;
         }
-        .login-container {
-            background: white;
-            padding: 40px 50px;
-            border-radius: 10px;
-            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
-            width: 380px;
-        }
-        .login-title {
-            text-align: center;
-            color: #1a3a5c;
-            margin-bottom: 30px;
-            font-size: 24px;
-        }
-        .form-group {
-            margin-bottom: 20px;
-        }
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            color: #333;
-            font-weight: 500;
-        }
-        .form-group input {
+        .login-wrap {
             width: 100%;
-            padding: 12px 15px;
-            border: 1px solid #ddd;
-            border-radius: 5px;
-            font-size: 14px;
-            transition: border-color 0.3s;
+            max-width: 880px;
+            min-height: 540px;
+            display: grid;
+            grid-template-columns: 1.05fr 0.95fr;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 24px 70px rgba(6, 20, 34, 0.42);
+            background: #fff;
         }
-        .form-group input:focus {
-            outline: none;
-            border-color: #2c5a87;
-        }
-        .remember-row {
+        .visual {
+            background: linear-gradient(160deg, #1a3a5c, #24577f 60%, #2c6d9d);
+            color: #fff;
+            padding: 44px 42px;
             display: flex;
-            align-items: center;
-            margin-bottom: 20px;
+            flex-direction: column;
+            position: relative;
+            overflow: hidden;
         }
-        .remember-row input[type="checkbox"] {
-            width: auto;
-            margin-right: 8px;
+        .visual::after {
+            content: "";
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.06);
+            right: -120px;
+            bottom: -100px;
         }
-        .remember-row label {
-            color: #666;
-            font-size: 14px;
+        .visual::before {
+            content: "";
+            position: absolute;
+            width: 180px;
+            height: 180px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+            left: -70px;
+            top: 90px;
         }
+        .visual-brand { display: flex; align-items: center; gap: 12px; font-size: 19px; font-weight: 650; letter-spacing: 0.4px; }
+        .visual-brand i { font-size: 26px; }
+        .visual-title { margin-top: 76px; font-size: 28px; font-weight: 650; line-height: 1.45; letter-spacing: 1px; }
+        .visual-title small { display: block; font-size: 12px; font-weight: 400; color: #b8cfdf; letter-spacing: 2px; margin-top: 14px; }
+        .visual-desc { margin-top: 22px; font-size: 12px; line-height: 1.9; color: #d0e0eb; max-width: 310px; }
+        .visual-features { margin-top: auto; padding-top: 34px; display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+        .visual-feature { display: flex; align-items: center; gap: 11px; font-size: 12px; color: #dbe8f1; }
+        .visual-feature i {
+            width: 30px;
+            height: 30px;
+            border-radius: 7px;
+            background: rgba(255, 255, 255, 0.12);
+            display: grid;
+            place-items: center;
+            font-size: 13px;
+            color: #fff;
+        }
+        .panel { padding: 50px 48px; display: flex; flex-direction: column; justify-content: center; }
+        .panel h1 { font-size: 21px; color: #1f3245; font-weight: 650; letter-spacing: 0.3px; }
+        .panel .subtitle { font-size: 11px; color: #8a96a3; margin: 8px 0 30px; letter-spacing: 0.4px; }
+        .field { margin-bottom: 18px; }
+        .field label { display: block; margin-bottom: 7px; color: #52616f; font-size: 12px; font-weight: 550; }
+        .field-input { position: relative; }
+        .field-input i {
+            position: absolute;
+            left: 13px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #9aa5b1;
+            font-size: 12px;
+        }
+        .field-input input {
+            width: 100%;
+            padding: 11px 13px 11px 36px;
+            border: 1px solid #d8dee5;
+            border-radius: 7px;
+            font: inherit;
+            font-size: 13px;
+            color: #263445;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: #fff;
+        }
+        .field-input input:focus {
+            outline: none;
+            border-color: #2c6d9d;
+            box-shadow: 0 0 0 3px rgba(44, 109, 157, 0.12);
+        }
+        .remember-row { display: flex; align-items: center; gap: 8px; margin: 4px 0 24px; }
+        .remember-row input[type="checkbox"] { width: 14px; height: 14px; accent-color: #2c6d9d; cursor: pointer; }
+        .remember-row label { color: #6b7785; font-size: 12px; cursor: pointer; }
         .login-btn {
             width: 100%;
             padding: 12px;
-            background: #1a3a5c;
-            color: white;
+            background: linear-gradient(135deg, #24577f, #2c6d9d);
+            color: #fff;
             border: none;
-            border-radius: 5px;
-            font-size: 16px;
-            cursor: pointer;
-            transition: background 0.3s;
-        }
-        .login-btn:hover {
-            background: #2c5a87;
-        }
-        .message {
-            margin-top: 15px;
-            padding: 10px;
-            border-radius: 5px;
-            text-align: center;
+            border-radius: 7px;
+            font: inherit;
             font-size: 14px;
+            font-weight: 550;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: filter 0.2s, transform 0.1s;
+        }
+        .login-btn:hover { filter: brightness(1.06); }
+        .login-btn:active { transform: translateY(1px); }
+        .login-btn:disabled { opacity: 0.7; cursor: not-allowed; }
+        .message {
+            margin-top: 16px;
+            padding: 10px 12px;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 12px;
             display: none;
         }
-        .message.error {
-            background: #ffe0e0;
-            color: #d63031;
-            display: block;
-        }
-        .message.success {
-            background: #d1f9d1;
-            color: #00b894;
-            display: block;
+        .message.error { background: #fdecec; color: #c24b4b; border: 1px solid #f3cdcd; display: block; }
+        .message.success { background: #eaf6f0; color: #26815f; border: 1px solid #c7e7d8; display: block; }
+        .panel-foot { margin-top: 26px; font-size: 10px; color: #a0abb6; text-align: center; line-height: 1.7; }
+        @media (max-width: 780px) {
+            .login-wrap { grid-template-columns: 1fr; max-width: 430px; min-height: auto; }
+            .visual { display: none; }
+            .panel { padding: 38px 30px; }
+            body { padding: 16px; }
         }
     </style>
 </head>
 <body>
-    <div class="login-container">
-        <h1 class="login-title">银行管理系统</h1>
-        <form id="loginForm">
-            <div class="form-group">
-                <label>用户名</label>
-                <input type="text" name="userName" id="userName" required>
+    <div class="login-wrap">
+        <div class="visual">
+            <div class="visual-brand">
+                <i class="fas fa-university"></i>
+                <span>银行柜面平台</span>
             </div>
-            <div class="form-group">
-                <label>密码</label>
-                <input type="password" name="password" id="password" required>
+            <div class="visual-title">
+                轻量柜面<br>业务管理平台
+                <small>BANK COUNTER MANAGEMENT</small>
             </div>
-            <div class="remember-row">
-                <input type="checkbox" id="remember">
-                <label for="remember">记住用户名</label>
+            <div class="visual-desc">
+                面向柜面与运营场景的一体化工作台，覆盖客户、银行卡与交易流水管理。
             </div>
-            <button type="submit" class="login-btn">登 录</button>
-        </form>
-        <div class="message" id="message"></div>
+            <div class="visual-features">
+                <div class="visual-feature"><i class="fas fa-chart-pie"></i><span>实时运营总览与交易趋势</span></div>
+                <div class="visual-feature"><i class="fas fa-shield-alt"></i><span>管理员 / 柜员 / 查询员分级授权</span></div>
+                <div class="visual-feature"><i class="fas fa-clock-rotate-left"></i><span>完整登录日志与操作留痕</span></div>
+            </div>
+        </div>
+        <div class="panel">
+            <h1>登录工作台</h1>
+            <div class="subtitle">请输入账号密码，进入柜面业务管理平台</div>
+            <form id="loginForm">
+                <div class="field">
+                    <label for="userName">用户名</label>
+                    <div class="field-input">
+                        <i class="fas fa-user"></i>
+                        <input type="text" name="userName" id="userName" autocomplete="username" required placeholder="请输入用户名">
+                    </div>
+                </div>
+                <div class="field">
+                    <label for="password">密码</label>
+                    <div class="field-input">
+                        <i class="fas fa-lock"></i>
+                        <input type="password" name="password" id="password" autocomplete="current-password" required placeholder="请输入密码">
+                    </div>
+                </div>
+                <div class="remember-row">
+                    <input type="checkbox" id="remember">
+                    <label for="remember">记住用户名</label>
+                </div>
+                <button type="submit" class="login-btn" id="loginBtn">登 录</button>
+            </form>
+            <div class="message" id="message"></div>
+            <div class="panel-foot">仅限授权人员使用 · 登录行为将被记录</div>
+        </div>
     </div>
 
     <script src="/static/js/jquery.min.js"></script>
@@ -152,6 +228,8 @@
                     localStorage.removeItem('savedUser');
                 }
 
+                $('#loginBtn').prop('disabled', true).text('登 录 中...');
+
                 $.ajax({
                     url: '/api/sys_user/login/',
                     type: 'POST',
@@ -189,6 +267,9 @@
                             msg = '服务器内部错误，请稍后重试';
                         }
                         showMsg(msg || '登录失败', 'error');
+                    },
+                    complete: function() {
+                        $('#loginBtn').prop('disabled', false).text('登 录');
                     }
                 });
             });

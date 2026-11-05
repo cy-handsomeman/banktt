@@ -1,37 +1,34 @@
 from decimal import Decimal
 
 from django.db import transaction
-from rest_framework import viewsets
+from rest_framework import mixins, viewsets
 from rest_framework.decorators import action
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from rest_framework.response import Response
 
 from apps.card_info.models import CardInfo
 from apps.card_info.serializers import CardInfoSerializer
-from apps.sys_user.permissions import BusinessPermission, is_manager_or_admin
-from apps.trade_info.models import TradeInfo
+from apps.sys_user.permissions import BusinessPermission, is_write_role
 
 CARD_STATUS_NORMAL = '正常'
 CARD_STATUS_LOST = '挂失'
 CARD_STATUS_CLOSED = '销户'
 
 
-class CardInfoViewSet(viewsets.ModelViewSet):
+class CardInfoViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.CreateModelMixin,
+    mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """银行卡：查询员只读，管理员与柜员可开户/编辑/变更状态（不提供删除）"""
+
     queryset = CardInfo.objects.all().order_by('card_id')
     serializer_class = CardInfoSerializer
     permission_classes = [BusinessPermission]
     filterset_fields = ['card_id', 'cur_type', 'customer_id', 'card_status']
     search_fields = ['card_id', 'cur_type']
-
-    def perform_destroy(self, instance):
-        # 卡上有交易流水时不允许物理删除，避免外键约束报 500
-        trade_count = TradeInfo.objects.filter(card_id=instance.card_id).count()
-        if trade_count:
-            raise ValidationError({
-                'detail': f'银行卡「{instance.card_id}」存在 {trade_count} 条交易流水，不能删除'
-            })
-        with transaction.atomic():
-            instance.delete()
 
     def _change_status(self, request, pk, target_status):
         """在事务内锁卡并校验状态流转是否合法"""
@@ -49,8 +46,8 @@ class CardInfoViewSet(viewsets.ModelViewSet):
             if target_status == CARD_STATUS_NORMAL and current != CARD_STATUS_LOST:
                 raise ValidationError({'detail': '只有挂失状态的银行卡可以解挂'})
             if target_status == CARD_STATUS_CLOSED:
-                if not is_manager_or_admin(request.user):
-                    raise PermissionDenied('仅超级管理员或大堂经理可办理销卡')
+                if not is_write_role(request.user):
+                    raise PermissionDenied('仅管理员或柜员可办理销卡')
                 if (card.balance or Decimal('0')) != Decimal('0'):
                     raise ValidationError(
                         {'detail': f'卡内余额为 {card.balance}，请先结清余额再销卡'}

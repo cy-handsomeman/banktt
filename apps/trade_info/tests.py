@@ -17,7 +17,7 @@ CARD_B = '6222020000000002'
 
 
 class FundFlowTests(APITestCase):
-    """资金链路回归测试：转账双边记账、余额校验、冲正幂等、余额还原"""
+    """资金链路回归测试：转账双边记账、余额校验、只读角色写拦截"""
 
     def setUp(self):
         cache.clear()
@@ -35,7 +35,7 @@ class FundFlowTests(APITestCase):
             password=make_password('123456'), customer_id=customer.customer_id,
         )
         self.manager = self._make_user('test_manager', 2)
-        self.teller = self._make_user('test_teller', 3)
+        self.query_officer = self._make_user('test_teller', 3)
         self.client.force_authenticate(user=SysUserPrincipal(self.manager))
 
     @staticmethod
@@ -78,38 +78,41 @@ class FundFlowTests(APITestCase):
         self.assertEqual(self._balance(CARD_B), Decimal('200.00'))
         self.assertEqual(TradeInfo.objects.count(), 0)
 
-    def test_reversal_restores_balances_and_cannot_repeat(self):
+    def test_query_officer_can_read_but_cannot_create_trade(self):
+        read_client = APIClient()
+        read_client.force_authenticate(user=SysUserPrincipal(self.query_officer))
+
+        listed = read_client.get('/api/trade/')
+        self.assertEqual(listed.status_code, 200)
+
+        created = read_client.post(
+            '/api/trade/',
+            {'trans_type': '存款', 'card_id': CARD_A, 'trans_money': '10.00'},
+            format='json',
+        )
+        self.assertEqual(created.status_code, 403)
+        self.assertEqual(self._balance(CARD_A), Decimal('100.00'))
+
+    def test_trade_cannot_be_updated_or_deleted(self):
         self.client.post(
             '/api/trade/',
             {'trans_type': '转账', 'card_id': CARD_A, 'to_card_id': CARD_B, 'trans_money': '50.00'},
             format='json',
         )
         out_trade = TradeInfo.objects.get(trans_type='转账转出')
-
-        response = self.client.post(f'/api/trade/{out_trade.tid}/reverse/', {}, format='json')
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(self._balance(CARD_A), Decimal('100.00'))
-        self.assertEqual(self._balance(CARD_B), Decimal('200.00'))
-        self.assertEqual(TradeInfo.objects.filter(trans_type='冲正').count(), 2)
-        self.assertTrue(TradeInfo.objects.get(pk=out_trade.tid).is_reversed)
-
-        repeat = self.client.post(f'/api/trade/{out_trade.tid}/reverse/', {}, format='json')
-        self.assertEqual(repeat.status_code, 400)
-        self.assertEqual(self._balance(CARD_A), Decimal('100.00'))
-        self.assertEqual(self._balance(CARD_B), Decimal('200.00'))
-
-    def test_transfer_entry_cannot_be_deleted(self):
-        self.client.post(
-            '/api/trade/',
-            {'trans_type': '转账', 'card_id': CARD_A, 'to_card_id': CARD_B, 'trans_money': '50.00'},
+        updated = self.client.put(
+            f'/api/trade/{out_trade.tid}/',
+            {'trans_type': '转账', 'card_id': CARD_A, 'trans_money': '60.00'},
             format='json',
         )
-        out_trade = TradeInfo.objects.get(trans_type='转账转出')
-        response = self.client.delete(f'/api/trade/{out_trade.tid}/')
-        self.assertEqual(response.status_code, 400)
+        self.assertEqual(updated.status_code, 405)
+        deleted = self.client.delete(f'/api/trade/{out_trade.tid}/')
+        self.assertEqual(deleted.status_code, 405)
         self.assertEqual(TradeInfo.objects.count(), 2)
+        self.assertEqual(self._balance(CARD_A), Decimal('50.00'))
+        self.assertEqual(self._balance(CARD_B), Decimal('250.00'))
 
-    def test_deposit_update_delete_keeps_balance_consistent(self):
+    def test_deposit_creates_entry_and_keeps_balance_consistent(self):
         created = self.client.post(
             '/api/trade/',
             {'trans_type': '存款', 'card_id': CARD_A, 'trans_money': '30.00'},
@@ -124,12 +127,10 @@ class FundFlowTests(APITestCase):
             {'trans_type': '存款', 'card_id': CARD_A, 'trans_money': '40.00'},
             format='json',
         )
-        self.assertEqual(updated.status_code, 200)
-        self.assertEqual(self._balance(CARD_A), Decimal('140.00'))
-
+        self.assertEqual(updated.status_code, 405)
         deleted = self.client.delete(f'/api/trade/{trade_id}/')
-        self.assertEqual(deleted.status_code, 204)
-        self.assertEqual(self._balance(CARD_A), Decimal('100.00'))
+        self.assertEqual(deleted.status_code, 405)
+        self.assertEqual(self._balance(CARD_A), Decimal('130.00'))
 
     def test_deposit_into_zero_balance_card(self):
         self.card_a.balance = Decimal('0.00')
@@ -141,41 +142,3 @@ class FundFlowTests(APITestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(self._balance(CARD_A), Decimal('10.00'))
-
-    def test_teller_cannot_reverse_trade(self):
-        self.client.post(
-            '/api/trade/',
-            {'trans_type': '转账', 'card_id': CARD_A, 'to_card_id': CARD_B, 'trans_money': '50.00'},
-            format='json',
-        )
-        out_trade = TradeInfo.objects.get(trans_type='转账转出')
-        teller_client = APIClient()
-        teller_client.force_authenticate(user=SysUserPrincipal(self.teller))
-        response = teller_client.post(f'/api/trade/{out_trade.tid}/reverse/', {}, format='json')
-        self.assertEqual(response.status_code, 403)
-
-    def test_reversal_rejected_when_card_closed(self):
-        """销户卡不能冲正，否则会把余额重新记回已关闭账户"""
-        deposit = self.client.post(
-            '/api/trade/',
-            {'trans_type': '存款', 'card_id': CARD_A, 'trans_money': '50.00'},
-            format='json',
-        )
-        self.assertEqual(deposit.status_code, 201)
-        tid = deposit.data['tid']
-
-        withdraw = self.client.post(
-            '/api/trade/',
-            {'trans_type': '取款', 'card_id': CARD_A, 'trans_money': str(self._balance(CARD_A))},
-            format='json',
-        )
-        self.assertEqual(withdraw.status_code, 201)
-        self.assertEqual(self._balance(CARD_A), Decimal('0.00'))
-
-        closed = self.client.post(f'/api/card/{CARD_A}/close/', {}, format='json')
-        self.assertEqual(closed.status_code, 200)
-
-        response = self.client.post(f'/api/trade/{tid}/reverse/', {}, format='json')
-        self.assertEqual(response.status_code, 400)
-        self.assertIn('销户', str(response.data.get('detail')))
-        self.assertEqual(self._balance(CARD_A), Decimal('0.00'))

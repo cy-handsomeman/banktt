@@ -1,89 +1,24 @@
-let currentList = [];
-let paginationInfo = {
-    currentPage: 1,
-    pageSize: 10,
-    totalCount: 0,
-    totalPages: 1
-};
-const API_BASE_URL = '/api/role/';
-const MENU_API_URL = '/api/menu/';
-const ROLE_MENU_API_URL = '/api/role_menu/';
-
-// 菜单由后台 sys_menu 表提供，前端不再硬编码
+let roleList = [];
 let menuList = [];
+let userList = [];
+let memberList = [];
+let selectedRoleId = null;
 
-function renderTable(data) {
-    const tbody = $('#dataTableBody');
-    if (!data || data.length === 0) {
-        tbody.html('<tr class="empty-row"><td colspan="4">暂无角色数据</td></tr>');
-        return;
-    }
-    let html = '';
-    data.forEach(item => {
-        html += `<tr data-id="${item.role_id}">
-            <td>${item.role_id}</td>
-            <td><strong>${escapeHtml(item.role_name)}</strong></td>
-            <td>${escapeHtml(item.description || '—')}</td>
-            <td class="action-buttons">
-                <button class="edit-btn" data-id="${item.role_id}" title="编辑"><i class="fas fa-edit"></i></button>
-                <button class="menu-btn" data-id="${item.role_id}" title="分配菜单"><i class="fas fa-list"></i></button>
-                <button class="delete-btn" data-id="${item.role_id}" title="删除"><i class="fas fa-trash-alt"></i></button>
-            </td>
-        </tr>`;
-    });
-    tbody.html(html);
-    $('.edit-btn').off('click').on('click', function() { openEditModal(parseInt($(this).data('id'))); });
-    $('.menu-btn').off('click').on('click', function() { openMenuModal(parseInt($(this).data('id'))); });
-    $('.delete-btn').off('click').on('click', function() { confirmDelete(parseInt($(this).data('id'))); });
+const ROLE_API = '/api/role/';
+const MENU_API = '/api/menu/';
+const ROLE_MENU_API = '/api/role_menu/';
+const USER_API = '/api/sys_user/';
+const USER_ROLE_API = '/api/sys_user_role/';
+
+function escapeHtml(value) {
+    return String(value === null || value === undefined ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
 }
 
-function escapeHtml(str) {
-    if (!str) return '';
-    return String(str).replace(/[&<>]/g, m => m === '&' ? '&amp;' : m === '<' ? '&lt;' : m === '>' ? '&gt;' : m);
-}
-
-function fetchList(page = 1) {
-    return $.ajax({
-        url: `${API_BASE_URL}?page=${page}&page_size=${paginationInfo.pageSize}`,
-        method: 'GET',
-        timeout: 5000,
-        contentType: 'application/json'
-    }).then(response => {
-        let data = [];
-        let count = 0;
-
-        if (Array.isArray(response)) {
-            data = response;
-            count = data.length;
-        } else if (response && response.data && Array.isArray(response.data)) {
-            data = response.data;
-            count = response.count || data.length;
-        } else if (response && response.results && Array.isArray(response.results)) {
-            data = response.results;
-            count = response.count || data.length;
-        } else {
-            data = [];
-        }
-
-        currentList = data;
-        paginationInfo.currentPage = page;
-        paginationInfo.totalCount = count;
-        paginationInfo.totalPages = Math.ceil(count / paginationInfo.pageSize);
-
-        renderTable(currentList);
-        updatePaginationUI(count, paginationInfo.totalPages);
-        return data;
-    }).catch(err => {
-        console.error("获取角色列表失败:", err);
-        currentList = [];
-        renderTable([]);
-        updatePaginationUI(0, 1);
-        showToast(parseApiError(err, '获取角色列表失败'), 2500);
-        return null;
-    });
-}
-
-// 把分页/非分页响应统一成数组
 function normalizeList(resp) {
     if (Array.isArray(resp)) return resp;
     if (resp && Array.isArray(resp.results)) return resp.results;
@@ -91,246 +26,125 @@ function normalizeList(resp) {
     return [];
 }
 
-function updatePaginationUI(totalCount, totalPages) {
-    const $wrapper = $('#paginationWrapper');
-    const $firstBtn = $('#firstPageBtn');
-    const $prevBtn = $('#prevPageBtn');
-    const $nextBtn = $('#nextPageBtn');
-    const $lastBtn = $('#lastPageBtn');
+/* ---------------- 角色列表 ---------------- */
+function fetchRoles(preferredId) {
+    return $.ajax({
+        url: `${ROLE_API}?page_size=100`,
+        method: 'GET'
+    }).then(function(resp) {
+        roleList = normalizeList(resp);
+        renderRoles();
+        const targetId = preferredId || selectedRoleId || (roleList[0] && roleList[0].role_id);
+        if (targetId) {
+            selectRole(targetId);
+        }
+        return roleList;
+    }).catch(function(err) {
+        console.error('获取角色列表失败', err);
+        showToast(parseApiError(err, '获取角色列表失败'), 2500);
+        $('#roleTableBody').html('<tr class="empty-row"><td colspan="4">角色加载失败</td></tr>');
+        return [];
+    });
+}
 
-    $('#totalCount').text(totalCount);
-    $('#currentPage').text(paginationInfo.currentPage);
-    $('#totalPages').text(totalPages);
+function renderRoles() {
+    const tbody = $('#roleTableBody');
+    if (!roleList.length) {
+        tbody.html('<tr class="empty-row"><td colspan="4">暂无角色</td></tr>');
+        return;
+    }
+    let html = '';
+    roleList.forEach(function(role) {
+        const selected = role.role_id === selectedRoleId ? 'selected' : '';
+        html += `<tr class="role-row ${selected}" data-id="${role.role_id}">
+            <td>${role.role_id}</td>
+            <td><strong>${escapeHtml(role.role_name)}</strong></td>
+            <td>${escapeHtml(role.description || '—')}</td>
+            <td class="action-buttons">
+                <button class="edit-btn" data-id="${role.role_id}" title="编辑"><i class="fas fa-edit"></i></button>
+                <button class="delete-btn" data-id="${role.role_id}" title="删除"><i class="fas fa-trash-alt"></i></button>
+            </td>
+        </tr>`;
+    });
+    tbody.html(html);
 
-    if (totalCount <= paginationInfo.pageSize) {
-        $wrapper.hide();
+    $('.role-row').off('click').on('click', function(e) {
+        if ($(e.target).closest('.action-buttons').length) return;
+        selectRole(parseInt($(this).data('id')));
+    });
+    $('.edit-btn').off('click').on('click', function(e) {
+        e.stopPropagation();
+        openEditModal(parseInt($(this).data('id')));
+    });
+    $('.delete-btn').off('click').on('click', function(e) {
+        e.stopPropagation();
+        confirmDeleteRole(parseInt($(this).data('id')));
+    });
+}
+
+function selectRole(roleId) {
+    selectedRoleId = roleId;
+    const role = roleList.find(function(item) { return item.role_id === roleId; });
+    const roleName = role ? role.role_name : '未选择角色';
+
+    $('.role-row').removeClass('selected');
+    $(`.role-row[data-id="${roleId}"]`).addClass('selected');
+    $('#selectedRoleName').text(roleName);
+    $('#memberRoleLabel').text('· ' + roleName);
+    $('#saveMenuBtn').prop('disabled', false);
+
+    loadPermissions(roleId);
+    loadMembers(roleId);
+}
+
+/* ---------------- 菜单授权 ---------------- */
+function loadPermissions(roleId) {
+    $.when(
+        $.ajax({ url: `${MENU_API}?page_size=200`, method: 'GET' }),
+        $.ajax({ url: `${ROLE_MENU_API}?role_id=${roleId}&page_size=200`, method: 'GET' })
+    ).then(function(menuResp, roleMenuResp) {
+        menuList = normalizeList(menuResp[0]);
+        const assignedIds = normalizeList(roleMenuResp[0]).map(function(item) { return item.menu_id; });
+        renderMenuGroups(assignedIds);
+    }).catch(function(err) {
+        console.error('加载菜单权限失败', err);
+        showToast(parseApiError(err, '加载菜单权限失败'), 2200);
+        $('#menuGroups').html('<div class="empty-tip">菜单权限加载失败</div>');
+    });
+}
+
+function renderMenuGroups(assignedIds) {
+    if (!menuList.length) {
+        $('#menuGroups').html('<div class="empty-tip">暂无可授权菜单</div>');
         return;
     }
 
-    $wrapper.show();
-
-    $firstBtn.prop('disabled', paginationInfo.currentPage === 1);
-    $prevBtn.prop('disabled', paginationInfo.currentPage === 1);
-    $nextBtn.prop('disabled', paginationInfo.currentPage >= totalPages);
-    $lastBtn.prop('disabled', paginationInfo.currentPage >= totalPages);
-
-    $firstBtn.css('opacity', paginationInfo.currentPage === 1 ? '0.5' : '1');
-    $prevBtn.css('opacity', paginationInfo.currentPage === 1 ? '0.5' : '1');
-    $nextBtn.css('opacity', paginationInfo.currentPage >= totalPages ? '0.5' : '1');
-    $lastBtn.css('opacity', paginationInfo.currentPage >= totalPages ? '0.5' : '1');
-
-    renderPageNumbers(totalPages);
-}
-
-function renderPageNumbers(totalPages) {
-    const $container = $('#pageNumbers');
-    $container.empty();
-
-    const maxVisible = 5;
-    let start = Math.max(1, paginationInfo.currentPage - Math.floor(maxVisible / 2));
-    let end = Math.min(totalPages, start + maxVisible - 1);
-
-    if (end - start + 1 < maxVisible) {
-        start = Math.max(1, end - maxVisible + 1);
-    }
-
-    for (let i = start; i <= end; i++) {
-        const $btn = $(`<button style="width: 32px; height: 32px; border: 1px solid #e5e7eb; border-radius: 6px; background: ${i === paginationInfo.currentPage ? '#2c6e9e' : 'white'}; color: ${i === paginationInfo.currentPage ? 'white' : '#374151'}; cursor: pointer; font-size: 0.85rem; transition: 0.15s;">${i}</button>`);
-        if (i === paginationInfo.currentPage) {
-            $btn.css('font-weight', '600');
-        }
-        $btn.on('click', () => {
-            paginationInfo.currentPage = i;
-            fetchList(i);
-        });
-        $container.append($btn);
-    }
-}
-
-function goToFirstPage() {
-    if (paginationInfo.currentPage > 1) {
-        paginationInfo.currentPage = 1;
-        fetchList(1);
-    }
-}
-
-function goToPrevPage() {
-    if (paginationInfo.currentPage > 1) {
-        paginationInfo.currentPage--;
-        fetchList(paginationInfo.currentPage);
-    }
-}
-
-function goToNextPage() {
-    if (paginationInfo.currentPage < paginationInfo.totalPages) {
-        paginationInfo.currentPage++;
-        fetchList(paginationInfo.currentPage);
-    }
-}
-
-function goToLastPage() {
-    if (paginationInfo.currentPage < paginationInfo.totalPages) {
-        paginationInfo.currentPage = paginationInfo.totalPages;
-        fetchList(paginationInfo.totalPages);
-    }
-}
-
-function addItem(payload) {
-    return $.ajax({
-        url: API_BASE_URL,
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(payload)
-    }).then(() => {
-        fetchList();
-        showToast("新增成功", 1500);
-    }).catch(err => {
-        console.error("新增角色失败:", err);
-        showToast(parseApiError(err, '新增角色失败'), 2500);
-        return Promise.reject(err);
-    });
-}
-
-function updateItem(id, payload) {
-    return $.ajax({
-        url: `${API_BASE_URL}${id}/`,
-        method: 'PUT',
-        contentType: 'application/json',
-        data: JSON.stringify(payload)
-    }).then(() => {
-        fetchList();
-        showToast("更新成功", 1500);
-    }).catch(err => {
-        console.error("更新角色失败:", err);
-        showToast(parseApiError(err, '更新角色失败'), 2500);
-        return Promise.reject(err);
-    });
-}
-
-function deleteItem(id) {
-    return $.ajax({
-        url: `${API_BASE_URL}${id}/`,
-        method: 'DELETE'
-    }).then(() => {
-        fetchList();
-        showToast("删除成功", 1500);
-    }).catch(err => {
-        console.error("删除角色失败:", err);
-        showToast(parseApiError(err, '删除角色失败'), 2500);
-    });
-}
-
-let toastTimer = null;
-function showToast(msg, duration = 2000) {
-    let toastEl = $('#dynamicToast');
-    if (toastEl.length === 0) {
-        $('body').append('<div id="dynamicToast" style="position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#2c3e50; color:white; padding:10px 20px; border-radius:40px; z-index:1100; font-size:0.85rem; opacity:0; transition:0.2s; pointer-events:none;"></div>');
-        toastEl = $('#dynamicToast');
-    }
-    toastEl.text(msg).css('opacity', '1');
-    if (toastTimer) clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastEl.css('opacity', '0'); }, duration);
-}
-
-let currentMode = 'add';
-function openAddModal() {
-    currentMode = 'add';
-    $('#modalTitle').text('新增角色');
-    $('#dataForm')[0].reset();
-    $('#editId').val('');
-    $('#dataModal').addClass('active');
-}
-
-function openEditModal(id) {
-    const item = currentList.find(u => u.role_id === id);
-    if (!item) { showToast("未找到数据", 1000); return; }
-    currentMode = 'edit';
-    $('#modalTitle').text('编辑角色');
-    $('#editId').val(item.role_id);
-    $('#role_name').val(item.role_name);
-    $('#description').val(item.description || '');
-    $('#dataModal').addClass('active');
-}
-
-function closeModal() { $('#dataModal').removeClass('active'); }
-
-function onSave() {
-    const roleName = $('#role_name').val().trim();
-    if (!roleName) { showToast("角色名称不能为空", 1500); return; }
-
-    const payload = {
-        role_name: roleName,
-        description: $('#description').val().trim()
-    };
-
-    if (currentMode === 'add') {
-        addItem(payload).then(() => closeModal()).catch(() => {});
-    } else {
-        updateItem(parseInt($('#editId').val()), payload).then(() => closeModal()).catch(() => {});
-    }
-}
-
-function confirmDelete(id) {
-    if (confirm('确定要删除这个角色吗？')) { deleteItem(id); }
-}
-
-function openMenuModal(roleId) {
-    const roleName = currentList.find(r => r.role_id === roleId)?.role_name || '';
-    $('#menuRoleId').val(roleId);
-    $('#menuModalTitle').text(`分配菜单权限 - ${roleName}`);
-    loadMenuItems(roleId);
-    $('#menuModal').addClass('active');
-}
-
-function closeMenuModal() {
-    $('#menuModal').removeClass('active');
-}
-
-function loadMenuItems(roleId) {
-    $.when(
-        $.ajax({ url: MENU_API_URL, method: 'GET', timeout: 5000 }),
-        $.ajax({ url: `${ROLE_MENU_API_URL}?role_id=${roleId}`, method: 'GET', timeout: 5000 })
-    ).then((menuResp, roleMenuResp) => {
-        menuList = normalizeList(menuResp[0]);
-        const assignedMenuIds = normalizeList(roleMenuResp[0]).map(item => item.menu_id);
-        renderMenuItems(assignedMenuIds);
-    }).catch(err => {
-        console.error("加载菜单失败:", err);
-        showToast(parseApiError(err, '加载菜单失败'), 2500);
-        menuList = [];
-        renderMenuItems([]);
-    });
-}
-
-function renderMenuItems(assignedMenuIds) {
-    // 分组名称与顺序全部来自 sys_menu.menu_group，避免前端维护 URL 映射
     const groups = {};
-    menuList.forEach(menu => {
+    menuList.forEach(function(menu) {
         const groupName = (menu.menu_group || '').trim() || '其他';
         (groups[groupName] = groups[groupName] || []).push(menu);
     });
 
     let html = '';
-    Object.keys(groups).forEach(groupName => {
-        html += `
-            <div class="menu-section">
-                <h4 class="menu-section-title"><i class="fas fa-layer-group"></i> ${escapeHtml(groupName)}</h4>
-                <div class="menu-items">
-        `;
-        groups[groupName].forEach(menu => {
-            const isChecked = assignedMenuIds.includes(menu.menu_id);
-            html += `
-                <div class="menu-item ${isChecked ? 'selected' : ''}" data-menu-id="${menu.menu_id}">
-                    <input type="checkbox" id="menu_${menu.menu_id}" ${isChecked ? 'checked' : ''}>
-                    <label for="menu_${menu.menu_id}">${escapeHtml(menu.menu_name)}</label>
-                </div>
-            `;
+    Object.keys(groups).forEach(function(groupName) {
+        groups[groupName].sort(function(a, b) {
+            return (a.sort_order || 0) - (b.sort_order || 0);
+        });
+        html += `<div class="menu-section">
+            <h4 class="menu-section-title"><i class="fas fa-layer-group"></i> ${escapeHtml(groupName)}</h4>
+            <div class="menu-items">`;
+        groups[groupName].forEach(function(menu) {
+            const checked = assignedIds.indexOf(menu.menu_id) !== -1;
+            html += `<div class="menu-item ${checked ? 'selected' : ''}" data-menu-id="${menu.menu_id}">
+                <input type="checkbox" id="menu_${menu.menu_id}" ${checked ? 'checked' : ''}>
+                <label for="menu_${menu.menu_id}">${escapeHtml(menu.menu_name)}</label>
+            </div>`;
         });
         html += '</div></div>';
     });
 
     $('#menuGroups').html(html);
-    
+
     $('.menu-item').off('click').on('click', function(e) {
         const checkbox = $(this).find('input[type="checkbox"]');
         if (e.target !== checkbox[0]) {
@@ -341,42 +155,264 @@ function renderMenuItems(assignedMenuIds) {
 }
 
 function saveMenuPermissions() {
-    const roleId = parseInt($('#menuRoleId').val());
-    const selectedMenus = [];
-    
+    if (!selectedRoleId) {
+        showToast('请先选择角色', 1500);
+        return;
+    }
+    const menuIds = [];
     $('.menu-item input[type="checkbox"]:checked').each(function() {
-        selectedMenus.push(parseInt($(this).attr('id').replace('menu_', '')));
+        menuIds.push(parseInt($(this).attr('id').replace('menu_', '')));
     });
-    
+
+    $('#saveMenuBtn').prop('disabled', true);
     $.ajax({
-        url: `${ROLE_MENU_API_URL}batch/`,
+        url: `${ROLE_MENU_API}batch/`,
         method: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ role_id: roleId, menu_ids: selectedMenus })
-    }).then(() => {
-        showToast("菜单权限分配成功", 1500);
-        closeMenuModal();
-    }).catch(err => {
-        showToast(parseApiError(err, '保存菜单权限失败'), 2000);
+        data: JSON.stringify({ role_id: selectedRoleId, menu_ids: menuIds })
+    }).then(function() {
+        showToast('菜单授权已保存', 1600);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '保存菜单授权失败'), 2400);
+    }).always(function() {
+        $('#saveMenuBtn').prop('disabled', false);
     });
 }
 
+/* ---------------- 角色成员 ---------------- */
+function fetchUsers() {
+    return $.ajax({
+        url: `${USER_API}?page_size=500`,
+        method: 'GET'
+    }).then(function(resp) {
+        userList = normalizeList(resp);
+        let html = '<option value="">请选择系统用户</option>';
+        userList.forEach(function(user) {
+            html += `<option value="${user.user_id}">${escapeHtml(user.user_name)}（ID ${user.user_id}）</option>`;
+        });
+        $('#userSelect').html(html);
+        return userList;
+    }).catch(function(err) {
+        console.error('获取系统用户失败', err);
+        return [];
+    });
+}
+
+function loadMembers(roleId) {
+    $.ajax({
+        url: `${USER_ROLE_API}?role_id=${roleId}&page_size=200`,
+        method: 'GET'
+    }).then(function(resp) {
+        memberList = normalizeList(resp);
+        renderMembers();
+    }).catch(function(err) {
+        console.error('获取角色成员失败', err);
+        $('#memberTableBody').html('<tr class="empty-row"><td colspan="4">成员加载失败</td></tr>');
+        $('#memberCount').text('0 人');
+    });
+}
+
+function userNameById(userId) {
+    const user = userList.find(function(item) { return item.user_id === userId; });
+    return user ? user.user_name : `用户 ${userId}`;
+}
+
+function renderMembers() {
+    const tbody = $('#memberTableBody');
+    const role = roleList.find(function(item) { return item.role_id === selectedRoleId; });
+    const roleName = role ? role.role_name : '';
+
+    $('#memberCount').text(memberList.length + ' 人');
+
+    if (!memberList.length) {
+        tbody.html('<tr class="empty-row"><td colspan="4">该角色暂无成员</td></tr>');
+        return;
+    }
+
+    let html = '';
+    memberList.forEach(function(item) {
+        html += `<tr>
+            <td>${item.user_id}</td>
+            <td><strong>${escapeHtml(userNameById(item.user_id))}</strong></td>
+            <td><span class="pill">${escapeHtml(roleName)}</span></td>
+            <td class="action-buttons">
+                <button class="delete-btn remove-member" data-id="${item.id}" title="移除"><i class="fas fa-user-minus"></i></button>
+            </td>
+        </tr>`;
+    });
+    tbody.html(html);
+
+    $('.remove-member').off('click').on('click', function() {
+        removeMember(parseInt($(this).data('id')));
+    });
+}
+
+function addMember() {
+    const userId = parseInt($('#userSelect').val());
+    if (!selectedRoleId) {
+        showToast('请先选择角色', 1500);
+        return;
+    }
+    if (!userId) {
+        showToast('请选择系统用户', 1500);
+        return;
+    }
+
+    $('#addMemberBtn').prop('disabled', true);
+    $.ajax({
+        url: USER_ROLE_API,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ user_id: userId, role_id: selectedRoleId })
+    }).then(function() {
+        showToast('成员添加成功', 1500);
+        $('#userSelect').val('');
+        loadMembers(selectedRoleId);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '添加成员失败'), 2400);
+    }).always(function() {
+        $('#addMemberBtn').prop('disabled', false);
+    });
+}
+
+function removeMember(assignmentId) {
+    if (!confirm('确定要将该用户从当前角色移除吗？')) return;
+
+    $.ajax({
+        url: `${USER_ROLE_API}${assignmentId}/`,
+        method: 'DELETE'
+    }).then(function() {
+        showToast('成员已移除', 1500);
+        loadMembers(selectedRoleId);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '移除成员失败'), 2400);
+    });
+}
+
+/* ---------------- 角色增删改 ---------------- */
+function addRole(payload) {
+    return $.ajax({
+        url: ROLE_API,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(payload)
+    }).then(function() {
+        showToast('角色创建成功', 1500);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '角色创建失败'), 2400);
+        return Promise.reject(err);
+    });
+}
+
+function updateRole(id, payload) {
+    return $.ajax({
+        url: `${ROLE_API}${id}/`,
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify(payload)
+    }).then(function() {
+        showToast('角色更新成功', 1500);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '角色更新失败'), 2400);
+        return Promise.reject(err);
+    });
+}
+
+function deleteRole(id) {
+    return $.ajax({
+        url: `${ROLE_API}${id}/`,
+        method: 'DELETE'
+    }).then(function() {
+        showToast('角色已删除', 1500);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '删除角色失败'), 2400);
+        return Promise.reject(err);
+    });
+}
+
+let currentMode = 'add';
+
+function openAddModal() {
+    currentMode = 'add';
+    $('#modalTitle').text('新建角色');
+    $('#dataForm')[0].reset();
+    $('#editId').val('');
+    $('#dataModal').addClass('active');
+}
+
+function openEditModal(id) {
+    const role = roleList.find(function(item) { return item.role_id === id; });
+    if (!role) {
+        showToast('未找到角色数据', 1200);
+        return;
+    }
+    currentMode = 'edit';
+    $('#modalTitle').text('编辑角色');
+    $('#editId').val(role.role_id);
+    $('#role_name').val(role.role_name);
+    $('#description').val(role.description || '');
+    $('#dataModal').addClass('active');
+}
+
+function closeModal() {
+    $('#dataModal').removeClass('active');
+}
+
+function onSave() {
+    const roleName = $('#role_name').val().trim();
+    if (!roleName) {
+        showToast('角色名称不能为空', 1500);
+        return;
+    }
+    const payload = {
+        role_name: roleName,
+        description: $('#description').val().trim()
+    };
+    const action = currentMode === 'add'
+        ? addRole(payload)
+        : updateRole(parseInt($('#editId').val()), payload);
+    action.then(function() {
+        closeModal();
+        fetchRoles(parseInt($('#editId').val()) || selectedRoleId);
+    }).catch(function() {});
+}
+
+function confirmDeleteRole(id) {
+    if (!confirm('确定要删除这个角色吗？已分配给用户的角色需先解除分配。')) return;
+    deleteRole(id).then(function() {
+        if (selectedRoleId === id) {
+            selectedRoleId = null;
+        }
+        fetchRoles();
+    }).catch(function() {});
+}
+
+let toastTimer = null;
+function showToast(msg, duration) {
+    let $toast = $('#roleToast');
+    if (!$toast.length) {
+        $toast = $('<div id="roleToast" class="toast"></div>');
+        $('body').append($toast);
+    }
+    $toast.text(msg).addClass('show');
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(function() { $toast.removeClass('show'); }, duration || 2000);
+}
+
 $(document).ready(function() {
-    fetchList();
-    $('#refreshBtn').on('click', function() { paginationInfo.currentPage = 1; fetchList(1); showToast("已刷新", 1500); });
+    fetchUsers();
+    fetchRoles();
+
+    $('#refreshBtn').on('click', function() {
+        fetchUsers();
+        fetchRoles(selectedRoleId);
+    });
     $('#openAddModalBtn').on('click', openAddModal);
     $('#closeModalBtn, #cancelModalBtn').on('click', closeModal);
     $('#submitBtn').on('click', onSave);
-    $('#dataModal').on('click', function(e) { if ($(e.target).hasClass('modal-overlay')) closeModal(); });
-
-    $('#firstPageBtn').on('click', goToFirstPage);
-    $('#prevPageBtn').on('click', goToPrevPage);
-    $('#nextPageBtn').on('click', goToNextPage);
-    $('#lastPageBtn').on('click', goToLastPage);
-
-    $('#closeMenuModalBtn, #cancelMenuModalBtn').on('click', closeMenuModal);
+    $('#dataModal').on('click', function(e) {
+        if ($(e.target).hasClass('modal-overlay')) closeModal();
+    });
     $('#saveMenuBtn').on('click', saveMenuPermissions);
-    $('#menuModal').on('click', function(e) { if ($(e.target).hasClass('modal-overlay')) closeMenuModal(); });
-
-    setInterval(function() { fetchList(paginationInfo.currentPage); }, 30000);
+    $('#addMemberBtn').on('click', addMember);
 });

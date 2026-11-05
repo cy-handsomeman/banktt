@@ -1,4 +1,5 @@
 let currentList = [];
+let canWriteBusiness = typeof window.__serverCanWrite === 'boolean' ? window.__serverCanWrite : true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -19,35 +20,36 @@ function renderTable(data) {
         const openMoney = item.open_money !== null ? '¥' + parseFloat(item.open_money).toFixed(2) : '—';
         const balance = item.balance !== null ? '¥' + parseFloat(item.balance).toFixed(2) : '—';
         const status = item.card_status || '正常';
-        const statusColor = status === '正常' ? '#047857' : (status === '挂失' ? '#b45309' : '#6b7280');
+        const statusClass = status === '正常' ? '' : (status === '挂失' ? 'pending' : 'muted');
         let statusActions = '';
-        if (status === '正常') {
-            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="report-loss" title="挂失" style="padding:4px 8px;margin-right:4px;border:1px solid #f59e0b;border-radius:6px;background:#fffbeb;color:#b45309;cursor:pointer;font-size:0.78rem;">挂失</button>`;
+        if (canWriteBusiness && status === '正常') {
+            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="report-loss" title="挂失">挂失</button>`;
         }
-        if (status === '挂失') {
-            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="unlock" title="解挂" style="padding:4px 8px;margin-right:4px;border:1px solid #10b981;border-radius:6px;background:#ecfdf5;color:#047857;cursor:pointer;font-size:0.78rem;">解挂</button>`;
+        if (canWriteBusiness && status === '挂失') {
+            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="unlock" title="解挂">解挂</button>`;
         }
-        if (status !== '销户') {
-            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="close" title="销卡" style="padding:4px 8px;margin-right:4px;border:1px solid #dc2626;border-radius:6px;background:#fef2f2;color:#dc2626;cursor:pointer;font-size:0.78rem;">销卡</button>`;
+        if (canWriteBusiness && status !== '销户') {
+            statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="close" title="销卡">销卡</button>`;
         }
+        const actionHtml = canWriteBusiness
+            ? `<td class="action-buttons">
+                    <button class="edit-btn" data-id="${escapeHtml(item.card_id)}" title="编辑"><i class="fas fa-edit"></i></button>
+                    ${statusActions}
+               </td>`
+            : '<td class="action-buttons">—</td>';
         html += `<tr data-id="${item.card_id}">
             <td class="card-id-cell">${escapeHtml(item.card_id)}</td>
             <td><strong>${escapeHtml(item.cur_type)}</strong></td>
-            <td><span style="color:${statusColor};font-weight:600;">${escapeHtml(status)}</span></td>
+            <td><span class="pill ${statusClass}">${escapeHtml(status)}</span></td>
             <td>${openDate}</td>
             <td class="money-cell">${openMoney}</td>
             <td class="money-cell">${balance}</td>
             <td>${item.customer_id}</td>
-            <td class="action-buttons">
-                <button class="edit-btn" data-id="${escapeHtml(item.card_id)}"><i class="fas fa-edit"></i></button>
-                <button class="delete-btn" data-id="${escapeHtml(item.card_id)}"><i class="fas fa-trash-alt"></i></button>
-                ${statusActions}
-            </td>
+            ${actionHtml}
         </tr>`;
     });
     tbody.html(html);
     $('.edit-btn').off('click').on('click', function() { openEditModal($(this).data('id')); });
-    $('.delete-btn').off('click').on('click', function() { confirmDelete($(this).data('id')); });
     $('.status-btn').off('click').on('click', function() {
         handleStatusAction($(this).data('id'), $(this).data('action'));
     });
@@ -215,19 +217,6 @@ function updateItem(cardId, payload) {
     });
 }
 
-function deleteItem(cardId) {
-    return $.ajax({
-        url: `${API_BASE_URL}${cardId}/`,
-        method: 'DELETE'
-    }).then(() => {
-        fetchList();
-        showToast("删除成功", 1500);
-    }).catch(err => {
-        console.error("删除银行卡失败:", err);
-        showToast(parseApiError(err, '删除银行卡失败'), 2500);
-    });
-}
-
 function handleStatusAction(cardId, action) {
     const configs = {
         'report-loss': { tip: '确定要挂失该银行卡吗？挂失后将无法进行交易。', ok: '挂失成功' },
@@ -333,11 +322,24 @@ function onSave() {
     }
 }
 
-function confirmDelete(cardId) {
-    if (confirm('确定要删除这张银行卡吗？')) { deleteItem(cardId); }
-}
-
 $(document).ready(function() {
+    if (typeof window.__serverCanWrite === 'boolean') {
+        // 服务端已注入角色，直接按结果控制只读状态，避免异步请求失败导致误判
+        if (!canWriteBusiness) {
+            $('#openAddModalBtn').addClass('hidden');
+            $('#readonlyBadge').removeClass('hidden');
+        }
+    } else if (window.getUserRoles) {
+        getUserRoles().then(roles => {
+            canWriteBusiness = window.isWriteRole(roles);
+            if (!canWriteBusiness) {
+                $('#openAddModalBtn').addClass('hidden');
+                $('#readonlyBadge').removeClass('hidden');
+                renderTable(currentList);
+            }
+        });
+    }
+
     fetchList();
     $('#refreshBtn').on('click', function() { paginationInfo.currentPage = 1; fetchList(1); showToast("已刷新", 1500); });
     $('#openAddModalBtn').on('click', openAddModal);

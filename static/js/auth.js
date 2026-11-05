@@ -99,3 +99,26 @@ window.parseApiError = function (xhr, fallback) {
     if (xhr && xhr.status >= 500) return '服务器内部错误，请稍后重试';
     return fallback || '操作失败';
 };
+
+// 当前登录用户的角色 ID（缓存一次，页面内复用）
+window.getUserRoles = function () {
+    if (window.__userRolesPromise) {
+        return window.__userRolesPromise;
+    }
+    window.__userRolesPromise = $.ajax({
+        url: '/api/get_user_menu/',
+        method: 'GET'
+    }).then(function (res) {
+        return (res && res.user_roles) || [];
+    }).catch(function () {
+        return [];
+    });
+    return window.__userRolesPromise;
+};
+
+// 管理员(1) 与 柜员(2) 具备业务写权限；查询员(3) 只读
+window.isWriteRole = function (roles) {
+    var list = roles || [];
+    return list.indexOf(1) !== -1 || list.indexOf(2) !== -1;
+};
+

@@ -132,6 +132,8 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                # 页面内注入当前用户角色，供模板控制只读状态
+                'banktt.context_processors.current_user_roles',
             ],
         },
     },

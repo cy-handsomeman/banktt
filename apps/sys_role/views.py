@@ -17,9 +17,9 @@ class SysRoleViewSet(viewsets.ModelViewSet):
     search_fields = ['role_name', 'description']
 
     def perform_destroy(self, instance):
-        # 超管角色是系统权限的根，删除后会导致无人可授权
+        # 管理员角色是系统权限的根，删除后会导致无人可授权
         if instance.role_id == SUPER_ADMIN_ROLE_ID:
-            raise ValidationError({'detail': '超级管理员角色不允许删除'})
+            raise ValidationError({'detail': '管理员角色不允许删除'})
         # 角色一旦被用户或菜单引用就不能直接删除，避免外键约束报 500
         user_count = SysUserRole.objects.filter(role_id=instance.role_id).count()
         if user_count:

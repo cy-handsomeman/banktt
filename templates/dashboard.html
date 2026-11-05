@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>运营总览</title>
+    <script src="/static/js/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+</head>
+<body>
+    <div class="content">
+        <div class="heading">
+            <div>
+                <h1>运营总览</h1>
+                <p>实时掌握今日交易、客户与银行卡运营情况</p>
+            </div>
+            <button class="btn" onclick="loadSummary()">
+                <i class="fas fa-rotate"></i> 刷新数据
+            </button>
+        </div>
+
+        <div class="alert">
+            <i class="fas fa-circle-info"></i>
+            数据来自业务库实时统计；转账按单边计入金额，避免双边流水重复计算。
+        </div>
+
+        <div class="grid4">
+            <div class="card stat">
+                <div class="stat-head">
+                    <span>今日交易笔数</span>
+                    <span class="stat-icon"><i class="fas fa-receipt"></i></span>
+                </div>
+                <div class="num" id="todayCount">--</div>
+                <div class="caption">含存款、取款、转账双边流水</div>
+            </div>
+            <div class="card stat">
+                <div class="stat-head">
+                    <span>今日交易金额</span>
+                    <span class="stat-icon"><i class="fas fa-coins"></i></span>
+                </div>
+                <div class="num" id="todayAmount">--</div>
+                <div class="caption">已排除转账转入，避免重复计算</div>
+            </div>
+            <div class="card stat">
+                <div class="stat-head">
+                    <span>客户总数</span>
+                    <span class="stat-icon"><i class="fas fa-users"></i></span>
+                </div>
+                <div class="num" id="customerCount">--</div>
+                <div class="caption">已建档客户</div>
+            </div>
+            <div class="card stat">
+                <div class="stat-head">
+                    <span>银行卡总数</span>
+                    <span class="stat-icon"><i class="fas fa-credit-card"></i></span>
+                </div>
+                <div class="num" id="cardCount">--</div>
+                <div class="caption" id="cardCaption">正常 -- / 销户 --</div>
+            </div>
+        </div>
+
+        <div class="cols">
+            <div class="panel">
+                <div class="panel-title">
+                    <h2>近 7 日交易趋势</h2>
+                    <span class="legend"><span class="dot"></span>交易笔数</span>
+                </div>
+                <div class="chart">
+                    <svg id="trendChart" viewBox="0 0 760 175" preserveAspectRatio="none"></svg>
+                </div>
+            </div>
+            <div class="panel">
+                <div class="panel-title">
+                    <h2>常用业务</h2>
+                    <span>快捷入口</span>
+                </div>
+                <div class="shortcuts">
+                    <button class="shortcut" data-url="/user/" data-title="客户管理" data-write="1"{% if not can_write_business %} disabled{% endif %}>
+                        <i class="fas fa-user-plus"></i>
+                        <strong>新增客户</strong>
+                        <small>客户建档</small>
+                    </button>
+                    <button class="shortcut" data-url="/card/" data-title="银行卡管理" data-write="1"{% if not can_write_business %} disabled{% endif %}>
+                        <i class="fas fa-credit-card"></i>
+                        <strong>开立银行卡</strong>
+                        <small>开卡与状态</small>
+                    </button>
+                    <button class="shortcut" data-url="/trade/" data-title="柜面业务" data-write="1"{% if not can_write_business %} disabled{% endif %}>
+                        <i class="fas fa-money-bill-transfer"></i>
+                        <strong>办理存取转</strong>
+                        <small>存款 / 取款 / 转账</small>
+                    </button>
+                    <button class="shortcut" data-url="/transactions/" data-title="交易流水" data-write="0">
+                        <i class="fas fa-list-alt"></i>
+                        <strong>交易流水</strong>
+                        <small>查询与详情</small>
+                    </button>
+                </div>
+                <div class="permission-note{% if can_write_business %} hidden{% endif %}" id="readonlyNote">
+                    当前角色为查询员，仅可查看数据；办理业务请使用柜员或管理员账号。
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-title">
+                <h2>最新交易</h2>
+                <a href="javascript:void(0)" onclick="goPage('/transactions/', '交易流水')">查看全部 →</a>
+            </div>
+            <div class="transactions table-wrapper" style="border:0;box-shadow:none;border-radius:0;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>流水号</th>
+                            <th>交易类型</th>
+                            <th>卡号</th>
+                            <th>交易金额</th>
+                            <th>交易后余额</th>
+                            <th>交易时间</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody id="latestTrades">
+                        <tr class="empty-row"><td colspan="7">正在加载...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/auth.js"></script>
+    <script>window.__serverCanWrite = {{ can_write_business|yesno:"true,false" }};</script>
+    <script>
+        const INFLOW_TYPES = ['存款', '还款', '转账转入'];
+
+        function escapeHtml(value) {
+            return String(value === null || value === undefined ? '' : value)
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/"/g, '&quot;')
+                .replace(/'/g, '&#39;');
+        }
+
+        function formatMoney(value) {
+            const num = parseFloat(value || 0);
+            if (Number.isNaN(num)) return '0.00';
+            return num.toLocaleString('zh-CN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        }
+
+        function loadSummary() {
+            $.ajax({
+                url: '/api/dashboard/summary/',
+                method: 'GET'
+            }).then(function(data) {
+                $('#todayCount').text(data.today_trade_count);
+                $('#todayAmount').text('¥ ' + formatMoney(data.today_trade_amount));
+                $('#customerCount').text(data.customer_count);
+                $('#cardCount').text(data.card_count);
+                $('#cardCaption').text(`正常 ${data.card_normal_count} / 销户 ${data.card_closed_count}`);
+                renderTrend(data.trend || []);
+                renderLatest(data.latest_trades || []);
+            }).catch(function(err) {
+                console.error('加载运营总览失败', err);
+                if (err && err.status === 401) {
+                    window.location.href = '/login/';
+                    return;
+                }
+                const message = window.parseApiError ? parseApiError(err, '数据加载失败') : '数据加载失败';
+                $('#latestTrades').html(`<tr class="empty-row"><td colspan="7">${escapeHtml(message)}</td></tr>`);
+            });
+        }
+
+        function renderTrend(points) {
+            const svg = $('#trendChart');
+            const width = 760;
+            const height = 175;
+            const padLeft = 44;
+            const padRight = 20;
+            const padTop = 18;
+            const padBottom = 30;
+            const chartWidth = width - padLeft - padRight;
+            const chartHeight = height - padTop - padBottom;
+            const maxCount = Math.max(1, ...points.map(p => p.count));
+            const stepX = points.length > 1 ? chartWidth / (points.length - 1) : chartWidth;
+
+            let lines = '';
+            let labels = '';
+            const coords = [];
+
+            for (let i = 0; i < 4; i++) {
+                const y = padTop + (chartHeight / 3) * i;
+                lines += `<line class="gridline" x1="${padLeft}" y1="${y}" x2="${width - padRight}" y2="${y}"></line>`;
+                const value = Math.round(maxCount - (maxCount / 3) * i);
+                labels += `<text x="${padLeft - 9}" y="${y + 3}" text-anchor="end">${value}</text>`;
+            }
+
+            points.forEach(function(point, index) {
+                const x = padLeft + stepX * index;
+                const y = padTop + chartHeight - (point.count / maxCount) * chartHeight;
+                coords.push([x, y]);
+            });
+
+            const path = coords.map((pair, index) => `${index === 0 ? 'M' : 'L'}${pair[0].toFixed(1)},${pair[1].toFixed(1)}`).join(' ');
+            const firstX = coords.length ? coords[0][0] : padLeft;
+            const lastX = coords.length ? coords[coords.length - 1][0] : width - padRight;
+            const areaPath = coords.length
+                ? `${path} L${lastX.toFixed(1)},${(padTop + chartHeight)} L${firstX.toFixed(1)},${(padTop + chartHeight)} Z`
+                : '';
+
+            let pointHtml = '';
+            let labelHtml = '';
+            coords.forEach(function(pair, index) {
+                pointHtml += `<circle cx="${pair[0].toFixed(1)}" cy="${pair[1].toFixed(1)}" r="3.6" fill="#327ba6"></circle>`;
+                labelHtml += `<text x="${pair[0].toFixed(1)}" y="${height - 8}" text-anchor="middle">${escapeHtml(points[index].date)}</text>`;
+            });
+
+            svg.html(`
+                ${lines}
+                ${areaPath ? `<path class="area" d="${areaPath}"></path>` : ''}
+                ${coords.length ? `<path class="trend" d="${path}"></path>` : ''}
+                ${pointHtml}
+                ${labels}
+                ${labelHtml}
+            `);
+        }
+
+        function renderLatest(trades) {
+            const tbody = $('#latestTrades');
+            if (!trades.length) {
+                tbody.html('<tr class="empty-row"><td colspan="7">暂无交易记录</td></tr>');
+                return;
+            }
+            let html = '';
+            trades.forEach(function(trade) {
+                const inflow = INFLOW_TYPES.indexOf(trade.trans_type) !== -1;
+                const sign = inflow ? '+' : '-';
+                const pillClass = inflow ? '' : 'pending';
+                html += `
+                    <tr>
+                        <td>${escapeHtml(trade.tid)}</td>
+                        <td><span class="dot ${inflow ? '' : 'out'}"></span><span class="pill ${pillClass}">${escapeHtml(trade.trans_type)}</span></td>
+                        <td>${escapeHtml(trade.card_id)}</td>
+                        <td class="money-cell ${inflow ? 'money-in' : 'money-out'}">${sign} ¥ ${formatMoney(trade.trans_money)}</td>
+                        <td class="money-cell">${trade.balance_after === null ? '-' : '¥ ' + formatMoney(trade.balance_after)}</td>
+                        <td>${escapeHtml(trade.trans_date)}</td>
+                        <td>${escapeHtml(trade.remark || '-')}</td>
+                    </tr>
+                `;
+            });
+            tbody.html(html);
+        }
+
+        function goPage(url, title) {
+            if (window.parent && window.parent !== window && typeof window.parent.navigateTo === 'function') {
+                window.parent.navigateTo(url, title);
+            } else {
+                window.location.href = url;
+            }
+        }
+
+        $(document).ready(function() {
+            if (!sessionStorage.getItem('access_token')) {
+                window.location.href = '/login/';
+                return;
+            }
+
+            $('.shortcut').on('click', function() {
+                if ($(this).is(':disabled')) return;
+                goPage($(this).data('url'), $(this).data('title'));
+            });
+
+            loadSummary();
+
+            if (typeof window.__serverCanWrite !== 'boolean' && window.getUserRoles) {
+                getUserRoles().then(function(roles) {
+                    if (!window.isWriteRole(roles)) {
+                        $('.shortcut[data-write="1"]').prop('disabled', true);
+                        $('#readonlyNote').removeClass('hidden');
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

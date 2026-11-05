@@ -8,8 +8,6 @@ ALLOWED_TRANS_TYPES = ('存款', '取款', '转账', '消费', '还款')
 TRANSFER_TYPE = '转账'
 TRANSFER_OUT_TYPE = '转账转出'
 TRANSFER_IN_TYPE = '转账转入'
-REVERSAL_TYPE = '冲正'
-TRANSFER_TRANS_TYPES = (TRANSFER_OUT_TYPE, TRANSFER_IN_TYPE)
 INFLOW_TRANS_TYPES = ('存款', '还款', TRANSFER_IN_TYPE)
 
 CARD_STATUS_NORMAL = '正常'
@@ -59,10 +57,6 @@ class TradeInfoSerializer(serializers.ModelSerializer):
 
     def validate(self, attrs):
         """转账必须指定收款卡，且不允许与本卡相同"""
-        # 转账是双边记账，修改单条流水会破坏账务平衡，必须走冲正
-        if self.instance is not None and self.instance.trans_type in TRANSFER_TRANS_TYPES:
-            raise serializers.ValidationError({'detail': '转账流水不支持修改；如需撤销请提交冲正'})
-
         trans_type = attrs.get('trans_type', getattr(self.instance, 'trans_type', None))
         card_id = attrs.get('card_id', getattr(self.instance, 'card_id', None))
         to_card_id = attrs.get('to_card_id', getattr(self.instance, 'to_card_id', None))

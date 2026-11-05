@@ -1,4 +1,5 @@
 let currentUserList = [];
+let canWriteBusiness = typeof window.__serverCanWrite === 'boolean' ? window.__serverCanWrite : true;
 let paginationInfo = {
     currentPage: 1,
     pageSize: 10,
@@ -17,6 +18,11 @@ function renderUserTable(users) {
     let htmlStr = '';
     users.forEach(user => {
         const pidDisplay = (user.pid !== null && user.pid !== undefined && user.pid !== '') ? user.pid : '—';
+        const actionHtml = canWriteBusiness
+            ? `<td class="action-buttons">
+                    <button class="edit-btn" data-id="${user.customer_id}" title="编辑"><i class="fas fa-edit"></i></button>
+               </td>`
+            : '<td class="action-buttons">—</td>';
         htmlStr += `
             <tr data-id="${user.customer_id}">
                 <td>${user.customer_id}</td>
@@ -24,21 +30,14 @@ function renderUserTable(users) {
                 <td>${escapeHtml(pidDisplay)}</td>
                 <td>${escapeHtml(user.telephone || '—')}</td>
                 <td>${escapeHtml(user.address || '—')}</td>
-                <td class="action-buttons">
-                    <button class="edit-btn" data-id="${user.customer_id}" title="编辑"><i class="fas fa-edit"></i></button>
-                    <button class="delete-btn" data-id="${user.customer_id}" title="删除"><i class="fas fa-trash-alt"></i></button>
-                </td>
+                ${actionHtml}
             </tr>
         `;
     });
     tbody.html(htmlStr);
-    $('.edit-btn').off('click').on('click', function(e) {
+    $('.edit-btn').off('click').on('click', function() {
         const userId = parseInt($(this).data('id'));
         openEditModal(userId);
-    });
-    $('.delete-btn').off('click').on('click', function(e) {
-        const userId = parseInt($(this).data('id'));
-        confirmDeleteUser(userId);
     });
 }
 
@@ -211,19 +210,6 @@ function updateUser(userId, userData) {
     });
 }
 
-function deleteUser(userId) {
-    return $.ajax({
-        url: `${API_BASE_URL}${userId}/`,
-        method: 'DELETE'
-    }).then(() => {
-        fetchUserList();
-        showToast("删除成功", 1500);
-    }).catch(err => {
-        console.error("删除客户失败:", err);
-        showToast(parseApiError(err, '删除客户失败'), 2500);
-    });
-}
-
 let toastTimer = null;
 function showToast(msg, duration = 2000) {
     let toastEl = $('#dynamicToast');
@@ -301,13 +287,6 @@ function onSaveUser() {
     }
 }
 
-function confirmDeleteUser(userId) {
-    const userName = currentUserList.find(u => u.customer_id === userId)?.customer_name || userId;
-    if (confirm(`确定要删除客户 "${userName}" 吗？\n删除后不可恢复。`)) {
-        deleteUser(userId);
-    }
-}
-
 let refreshInterval = null;
 
 function startAutoRefresh() {
@@ -334,6 +313,23 @@ function handleRefresh() {
 }
 
 $(document).ready(function() {
+    if (typeof window.__serverCanWrite === 'boolean') {
+        // 服务端已注入角色，直接按结果控制只读状态，避免异步请求失败导致误判
+        if (!canWriteBusiness) {
+            $('#openAddModalBtn').addClass('hidden');
+            $('#readonlyBadge').removeClass('hidden');
+        }
+    } else if (window.getUserRoles) {
+        getUserRoles().then(roles => {
+            canWriteBusiness = window.isWriteRole(roles);
+            if (!canWriteBusiness) {
+                $('#openAddModalBtn').addClass('hidden');
+                $('#readonlyBadge').removeClass('hidden');
+                renderUserTable(currentUserList);
+            }
+        });
+    }
+
     fetchUserList();
     startAutoRefresh();
     $('#refreshBtn').on('click', handleRefresh);

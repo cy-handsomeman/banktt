@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>交易流水</title>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/theme.css">
+    <style>
+        .filter-panel {
+            background: #fff;
+            border: 1px solid var(--card-line);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 15px 17px;
+            margin-bottom: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: flex-end;
+            gap: 13px;
+        }
+        .filter-field { display: flex; flex-direction: column; gap: 6px; }
+        .filter-field label { font-size: 11px; color: #768391; }
+        .filter-field input, .filter-field select {
+            height: 34px;
+            padding: 0 10px;
+            border: 1px solid #d8dee5;
+            border-radius: 6px;
+            font: inherit;
+            font-size: 12px;
+            color: var(--ink);
+            background: #fff;
+        }
+        .filter-field input:focus, .filter-field select:focus {
+            outline: none;
+            border-color: var(--blue);
+        }
+        .filter-field.wide input { width: 190px; }
+        .filter-actions { display: flex; gap: 8px; margin-left: auto; }
+        .detail-grid { display: grid; grid-template-columns: 110px 1fr; gap: 11px 14px; font-size: 12px; }
+        .detail-grid .label { color: #82909d; }
+        .detail-grid .value { color: #35485c; word-break: break-all; }
+    </style>
+</head>
+<body>
+<div class="manager">
+    <div class="header">
+        <h1><i class="fas fa-list-alt"></i>交易流水</h1>
+        <div class="header-right">
+            <button class="btn-refresh" id="refreshBtn"><i class="fas fa-sync-alt"></i> 刷新</button>
+        </div>
+    </div>
+
+    <div class="filter-panel">
+        <div class="filter-field wide">
+            <label>银行卡号</label>
+            <input type="text" id="filterCardId" placeholder="精确卡号" maxlength="20">
+        </div>
+        <div class="filter-field">
+            <label>交易类型</label>
+            <select id="filterTransType">
+                <option value="">全部类型</option>
+                <option value="存款">存款</option>
+                <option value="取款">取款</option>
+                <option value="转账转出">转账转出</option>
+                <option value="转账转入">转账转入</option>
+                <option value="消费">消费</option>
+                <option value="还款">还款</option>
+            </select>
+        </div>
+        <div class="filter-field">
+            <label>开始日期</label>
+            <input type="date" id="filterStartDate">
+        </div>
+        <div class="filter-field">
+            <label>结束日期</label>
+            <input type="date" id="filterEndDate">
+        </div>
+        <div class="filter-actions">
+            <button class="btn" id="resetBtn">重置</button>
+            <button class="btn primary" id="searchBtn"><i class="fas fa-magnifying-glass"></i> 查询</button>
+        </div>
+    </div>
+
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>交易ID</th><th>交易类型</th><th>银行卡号</th><th>对方卡号</th><th>交易日期</th><th>交易金额</th><th>交易后余额</th><th>备注</th><th width="70">操作</th>
+                </tr>
+            </thead>
+            <tbody id="recordsBody">
+                <tr class="empty-row"><td colspan="9">正在加载...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div class="pagination-wrapper" id="paginationWrapper" style="display: none;">
+        <div class="pagination-info">
+            共 <span id="totalCount">0</span> 条流水，当前第 <span id="currentPage">1</span> / <span id="totalPages">1</span> 页
+        </div>
+        <div class="pagination" style="display: flex; align-items: center; gap: 6px;">
+            <button class="pagination-btn" id="firstPageBtn">首页</button>
+            <button class="pagination-btn" id="prevPageBtn">上一页</button>
+            <div class="page-numbers" id="pageNumbers" style="display: flex; gap: 4px;"></div>
+            <button class="pagination-btn" id="nextPageBtn">下一页</button>
+            <button class="pagination-btn" id="lastPageBtn">末页</button>
+        </div>
+    </div>
+</div>
+
+<div id="detailModal" class="modal-overlay">
+    <div class="modal-container">
+        <div class="modal-header">
+            <h3>交易详情</h3>
+            <button class="modal-close" id="closeDetailBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="detail-grid" id="detailContent"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn" id="closeDetailBtn2">关闭</button>
+        </div>
+    </div>
+</div>
+
+<script src="/static/js/auth.js"></script>
+<script src="/static/js/trade_records.js"></script>
+</body>
+</html>

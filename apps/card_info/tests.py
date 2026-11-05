@@ -48,15 +48,15 @@ class CardStatusTests(APITestCase):
         self.card.refresh_from_db()
 
     def test_report_loss_and_unlock(self):
-        response = self.teller_client.post(f'/api/card/{CARD_ID}/report-loss/', {}, format='json')
+        response = self.manager_client.post(f'/api/card/{CARD_ID}/report-loss/', {}, format='json')
         self.assertEqual(response.status_code, 200)
         self._refresh_card()
         self.assertEqual(self.card.card_status, '挂失')
 
-        repeat = self.teller_client.post(f'/api/card/{CARD_ID}/report-loss/', {}, format='json')
+        repeat = self.manager_client.post(f'/api/card/{CARD_ID}/report-loss/', {}, format='json')
         self.assertEqual(repeat.status_code, 400)
 
-        unlocked = self.teller_client.post(f'/api/card/{CARD_ID}/unlock/', {}, format='json')
+        unlocked = self.manager_client.post(f'/api/card/{CARD_ID}/unlock/', {}, format='json')
         self.assertEqual(unlocked.status_code, 200)
         self._refresh_card()
         self.assertEqual(self.card.card_status, '正常')
@@ -80,12 +80,17 @@ class CardStatusTests(APITestCase):
         self._refresh_card()
         self.assertEqual(self.card.card_status, '销户')
 
-    def test_card_with_trades_cannot_be_deleted(self):
+    def test_query_officer_cannot_write_card(self):
+        response = self.teller_client.post(f'/api/card/{CARD_ID}/report-loss/', {}, format='json')
+        self.assertEqual(response.status_code, 403)
+        self._refresh_card()
+        self.assertEqual(self.card.card_status, '正常')
+
+    def test_card_cannot_be_deleted(self):
         TradeInfo.objects.create(
             trans_type='存款', card_id=CARD_ID, trans_date=timezone.now(),
             trans_money=Decimal('10.00'), balance_after=Decimal('110.00'),
         )
         response = self.manager_client.delete(f'/api/card/{CARD_ID}/')
-        self.assertEqual(response.status_code, 400)
-        self.assertIsInstance(response.data.get('detail'), str)
+        self.assertEqual(response.status_code, 405)
         self.assertTrue(CardInfo.objects.filter(card_id=CARD_ID).exists())
