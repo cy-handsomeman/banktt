@@ -34,6 +34,26 @@ class AdminGuardTests(APITestCase):
         cleared = self.client.post(f'/api/sys_user_role/user/{self.admin.user_id}/clear/')
         self.assertEqual(cleared.status_code, 400)
 
+    def test_binding_with_missing_user_or_role_returns_400(self):
+        missing_user = self.client.post(
+            '/api/sys_user_role/', {'user_id': 999999, 'role_id': 1}, format='json'
+        )
+        self.assertEqual(missing_user.status_code, 400)
+        self.assertIsInstance(missing_user.data.get('detail'), str)
+
+        missing_role = self.client.post(
+            '/api/sys_user_role/', {'user_id': self.admin.user_id, 'role_id': 999999}, format='json'
+        )
+        self.assertEqual(missing_role.status_code, 400)
+        self.assertIsInstance(missing_role.data.get('detail'), str)
+
+    def test_duplicate_user_role_binding_returns_409(self):
+        response = self.client.post(
+            '/api/sys_user_role/', {'user_id': self.admin.user_id, 'role_id': 1}, format='json'
+        )
+        self.assertEqual(response.status_code, 409)
+        self.assertEqual(SysUserRole.objects.filter(user_id=self.admin.user_id, role_id=1).count(), 1)
+
     def test_duplicate_role_menu_binding_returns_409(self):
         menu = SysMenu.objects.create(
             menu_name='临时菜单', menu_url='/tmp_menu/', menu_group='临时', sort_order=99

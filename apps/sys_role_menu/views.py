@@ -72,10 +72,17 @@ class SysRoleMenuViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        with transaction.atomic():
-            SysRoleMenu.objects.filter(role_id=role_id).delete()
-            SysRoleMenu.objects.bulk_create([
-                SysRoleMenu(role_id=role_id, menu_id=menu_id)
-                for menu_id in dict.fromkeys(parsed_ids)  # 去重，避免重复绑定
-            ])
+        try:
+            with transaction.atomic():
+                SysRoleMenu.objects.filter(role_id=role_id).delete()
+                SysRoleMenu.objects.bulk_create([
+                    SysRoleMenu(role_id=role_id, menu_id=menu_id)
+                    for menu_id in dict.fromkeys(parsed_ids)  # 去重，避免重复绑定
+                ])
+        except IntegrityError:
+            # 校验与写入之间菜单被删除等并发情况，统一返回可读错误而不是 500
+            return Response(
+                {'detail': '角色菜单绑定冲突，请刷新后重试'},
+                status=status.HTTP_409_CONFLICT
+            )
         return Response({'success': True}, status=status.HTTP_200_OK)

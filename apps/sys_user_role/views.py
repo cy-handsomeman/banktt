@@ -1,4 +1,4 @@
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from rest_framework import viewsets, status
 from rest_framework.exceptions import ValidationError
 from rest_framework.response import Response
@@ -9,6 +9,7 @@ from apps.sys_user_role.serializers import SysUserRoleSerializer
 from apps.sys_role_menu.models import SysRoleMenu
 from apps.sys_menu.models import SysMenu
 from apps.sys_role.models import SysRole
+from apps.sys_user.models import SysUser
 from apps.sys_user.permissions import (
     IsSuperAdmin,
     SUPER_ADMIN_ROLE_ID,
@@ -279,6 +280,18 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        # 先校验关联对象存在，避免数据库外键报错直接变成 500
+        if not SysUser.objects.filter(user_id=user_id).exists():
+            return Response(
+                {'detail': '用户不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if not SysRole.objects.filter(role_id=role_id).exists():
+            return Response(
+                {'detail': '角色不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # 先检查是否已存在
         if SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists():
             return Response(
@@ -286,4 +299,11 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_409_CONFLICT
             )
 
-        return super().create(request, *args, **kwargs)
+        try:
+            return super().create(request, *args, **kwargs)
+        except IntegrityError:
+            # 并发下两个请求同时通过上面的检查，由唯一约束兜底
+            return Response(
+                {'detail': '该用户已拥有此角色'},
+                status=status.HTTP_409_CONFLICT
+            )
