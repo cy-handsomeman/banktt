@@ -11,6 +11,8 @@ from apps.user_info.models import UserInfo
 CARD_BIN = '622202'
 CARD_ID_LENGTH = 16
 CARD_ID_ATTEMPTS = 5
+# 货币类型固定枚举，与前端下拉保持一致；禁止再写入 RMB/CNY 等历史代码
+CURRENCY_CHOICES = ('人民币', '美元', '欧元', '港币')
 
 
 def generate_card_id():
@@ -86,4 +88,12 @@ class CardInfoSerializer(serializers.ModelSerializer):
         """客户必须已存在"""
         if not UserInfo.objects.filter(customer_id=value).exists():
             raise serializers.ValidationError('客户不存在，请先创建客户')
+        return value
+
+    def validate_cur_type(self, value):
+        """货币类型只接受固定枚举，避免写入 RMB/CNY 等非法历史值"""
+        if value not in CURRENCY_CHOICES:
+            raise serializers.ValidationError(
+                '货币类型只能为：' + '、'.join(CURRENCY_CHOICES)
+            )
         return value

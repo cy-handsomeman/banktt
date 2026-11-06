@@ -26,12 +26,12 @@ class FundFlowTests(APITestCase):
             customer_name='张三', pid='110101199001010011', telephone='13800000000'
         )
         self.card_a = CardInfo.objects.create(
-            card_id=CARD_A, cur_type='CNY', open_date=timezone.now(),
+            card_id=CARD_A, cur_type='人民币', open_date=timezone.now(),
             open_money=Decimal('100.00'), balance=Decimal('100.00'), card_status='正常',
             password=make_password('123456'), customer_id=customer.customer_id,
         )
         self.card_b = CardInfo.objects.create(
-            card_id=CARD_B, cur_type='CNY', open_date=timezone.now(),
+            card_id=CARD_B, cur_type='人民币', open_date=timezone.now(),
             open_money=Decimal('200.00'), balance=Decimal('200.00'), card_status='正常',
             password=make_password('123456'), customer_id=customer.customer_id,
         )
@@ -42,7 +42,7 @@ class FundFlowTests(APITestCase):
     @staticmethod
     def _make_user(user_name, role_id):
         user = SysUser.objects.create(
-            user_name=user_name, pid='110101199001010022', email='',
+            user_name=user_name, pid=f'11010119900101{role_id:04d}', email='',
             mobile='13900000000', password=make_password('Test@12345'),
         )
         SysUserRole.objects.create(user_id=user.user_id, role_id=role_id)

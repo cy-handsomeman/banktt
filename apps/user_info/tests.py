@@ -19,7 +19,7 @@ class CustomerPermissionTests(APITestCase):
             customer_name='赵六', pid='110101199001010055', telephone='13500000000'
         )
         CardInfo.objects.create(
-            card_id='6222020000000022', cur_type='CNY', open_date=timezone.now(),
+            card_id='6222020000000022', cur_type='人民币', open_date=timezone.now(),
             open_money=0, balance=0, card_status='正常',
             password=make_password('123456'), customer_id=self.customer.customer_id,
         )
@@ -33,7 +33,7 @@ class CustomerPermissionTests(APITestCase):
     @staticmethod
     def _make_user(user_name, role_id):
         user = SysUser.objects.create(
-            user_name=user_name, pid='110101199001010066', email='',
+            user_name=user_name, pid=f'11010119900101{role_id:04d}', email='',
             mobile='13900000000', password=make_password('Test@12345'),
         )
         SysUserRole.objects.create(user_id=user.user_id, role_id=role_id)
@@ -81,3 +81,44 @@ class CustomerPermissionTests(APITestCase):
         self.assertEqual(listed.status_code, 200)
         detail = self.read_client.get(f'/api/user/{self.customer.customer_id}/')
         self.assertEqual(detail.status_code, 200)
+
+    def test_create_rejects_invalid_pid_format(self):
+        response = self.manager_client.post(
+            '/api/user/',
+            {'customer_name': '钱七', 'pid': '123456', 'telephone': '13800001111'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('pid', response.data)
+
+    def test_create_rejects_invalid_telephone_format(self):
+        response = self.manager_client.post(
+            '/api/user/',
+            {'customer_name': '钱七', 'pid': '110101199001010077', 'telephone': '123'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('telephone', response.data)
+
+    def test_create_rejects_duplicate_pid(self):
+        """开户身份证号必须唯一"""
+        response = self.manager_client.post(
+            '/api/user/',
+            {'customer_name': '钱七', 'pid': self.customer.pid, 'telephone': '13800001111'},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('pid', response.data)
+        self.assertEqual(UserInfo.objects.count(), 1)
+
+    def test_update_rejects_duplicate_pid(self):
+        other = UserInfo.objects.create(
+            customer_name='钱七', pid='110101199001010077', telephone='13800001111'
+        )
+        response = self.manager_client.put(
+            f'/api/user/{self.customer.customer_id}/',
+            {'customer_name': '赵六改', 'pid': other.pid, 'telephone': self.customer.telephone},
+            format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('pid', response.data)

@@ -26,7 +26,7 @@ class CardStatusTests(APITestCase):
             customer_name='王五', pid='110101199001010033', telephone='13600000000'
         )
         self.card = CardInfo.objects.create(
-            card_id=CARD_ID, cur_type='CNY', open_date=timezone.now(),
+            card_id=CARD_ID, cur_type='人民币', open_date=timezone.now(),
             open_money=Decimal('100.00'), balance=Decimal('100.00'), card_status='正常',
             password=make_password('123456'), customer_id=self.customer.customer_id,
         )
@@ -40,7 +40,7 @@ class CardStatusTests(APITestCase):
     @staticmethod
     def _make_user(user_name, role_id):
         user = SysUser.objects.create(
-            user_name=user_name, pid='110101199001010044', email='',
+            user_name=user_name, pid=f'11010119900101{role_id:04d}', email='',
             mobile='13900000000', password=make_password('Test@12345'),
         )
         SysUserRole.objects.create(user_id=user.user_id, role_id=role_id)
@@ -99,7 +99,7 @@ class CardStatusTests(APITestCase):
 
     def _create_card_payload(self, customer_id, card_id=None):
         payload = {
-            'cur_type': 'CNY',
+            'cur_type': '人民币',
             'open_date': timezone.now().isoformat(),
             'open_money': '50.00',
             'customer_id': customer_id,
@@ -225,12 +225,12 @@ class CardStatusTests(APITestCase):
             customer_name='赵六', pid='110101199001010055', telephone='13700000000'
         )
         CardInfo.objects.create(
-            card_id='6222020000000022', cur_type='USD', open_date=timezone.now(),
+            card_id='6222020000000022', cur_type='美元', open_date=timezone.now(),
             open_money=Decimal('20.00'), balance=Decimal('20.00'), card_status='挂失',
             password=make_password('123456'), customer_id=other.customer_id,
         )
 
-        by_type = self.manager_client.get('/api/card/?cur_type=USD')
+        by_type = self.manager_client.get('/api/card/', {'cur_type': '美元'})
         self.assertEqual(by_type.status_code, 200)
         self.assertEqual([c['card_id'] for c in by_type.data['results']], ['6222020000000022'])
 
@@ -278,6 +278,27 @@ class CardStatusTests(APITestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn('open_money', response.data)
 
+    def test_create_rejects_invalid_currency(self):
+        """货币类型只接受人民币/美元/欧元/港币，历史代码 RMB 不得再写入"""
+        payload = self._create_card_payload(self.customer.customer_id)
+        payload['cur_type'] = 'RMB'
+        response = self.manager_client.post('/api/card/', payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('cur_type', response.data)
+        self.assertEqual(CardInfo.objects.count(), 1)
+
+    def test_update_rejects_invalid_currency(self):
+        response = self.manager_client.put(
+            f'/api/card/{CARD_ID}/', {
+                'cur_type': 'CNY',
+                'open_date': timezone.now().isoformat(),
+            }, format='json',
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('cur_type', response.data)
+        self._refresh_card()
+        self.assertEqual(self.card.cur_type, '人民币')
+
     def test_create_ignores_client_balance_and_status(self):
         """客户端传入的余额与状态无效，初始余额恒等于开户金额"""
         payload = self._create_card_payload(self.customer.customer_id)
@@ -293,7 +314,7 @@ class CardStatusTests(APITestCase):
         """编辑可改货币类型/开户日期并重置密码，密码同样哈希入库"""
         response = self.manager_client.put(
             f'/api/card/{CARD_ID}/', {
-                'cur_type': 'USD',
+                'cur_type': '美元',
                 'open_date': timezone.now().isoformat(),
                 'open_money': '500.00',
                 'customer_id': self.customer.customer_id,
@@ -302,7 +323,7 @@ class CardStatusTests(APITestCase):
         )
         self.assertEqual(response.status_code, 200)
         self._refresh_card()
-        self.assertEqual(self.card.cur_type, 'USD')
+        self.assertEqual(self.card.cur_type, '美元')
         self.assertEqual(self.card.balance, Decimal('100.00'))
         self.assertTrue(check_password('newpass123', self.card.password))
 
@@ -310,7 +331,7 @@ class CardStatusTests(APITestCase):
         """余额、卡状态与开户金额在编辑时均被忽略"""
         response = self.manager_client.put(
             f'/api/card/{CARD_ID}/', {
-                'cur_type': 'CNY',
+                'cur_type': '人民币',
                 'open_date': timezone.now().isoformat(),
                 'open_money': '500.00',
                 'balance': '0.00',
@@ -328,13 +349,13 @@ class CardStatusTests(APITestCase):
         """编辑时不应强制提交不可修改的开户金额与归属客户"""
         response = self.manager_client.put(
             f'/api/card/{CARD_ID}/', {
-                'cur_type': 'USD',
+                'cur_type': '美元',
                 'open_date': timezone.now().isoformat(),
             }, format='json',
         )
         self.assertEqual(response.status_code, 200)
         self._refresh_card()
-        self.assertEqual(self.card.cur_type, 'USD')
+        self.assertEqual(self.card.cur_type, '美元')
         self.assertEqual(self.card.customer_id, self.customer.customer_id)
         self.assertEqual(self.card.open_money, Decimal('100.00'))
 
@@ -344,7 +365,7 @@ class CardStatusTests(APITestCase):
         )
         self.assertEqual(response.status_code, 403)
         self._refresh_card()
-        self.assertEqual(self.card.cur_type, 'CNY')
+        self.assertEqual(self.card.cur_type, '人民币')
 
     def test_unlock_rejected_when_not_lost(self):
         response = self.manager_client.post(f'/api/card/{CARD_ID}/unlock/', {}, format='json')
