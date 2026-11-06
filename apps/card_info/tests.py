@@ -1,7 +1,7 @@
 from decimal import Decimal
 from unittest.mock import patch
 
-from django.contrib.auth.hashers import make_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.core.cache import cache
 from django.utils import timezone
 from rest_framework.test import APIClient, APITestCase
@@ -206,3 +206,160 @@ class CardStatusTests(APITestCase):
         response = self.manager_client.get('/api/user/options/')
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data, [])
+
+    def test_list_and_retrieve_card(self):
+        """列表分页结构与详情接口均返回卡号，且不暴露密码"""
+        list_resp = self.manager_client.get('/api/card/')
+        self.assertEqual(list_resp.status_code, 200)
+        self.assertEqual(list_resp.data['count'], 1)
+        self.assertEqual(list_resp.data['results'][0]['card_id'], CARD_ID)
+
+        detail = self.manager_client.get(f'/api/card/{CARD_ID}/')
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data['card_id'], CARD_ID)
+        self.assertNotIn('password', detail.data)
+
+    def test_list_filters_and_search(self):
+        """列表支持按货币类型、状态、客户与卡号搜索"""
+        other = UserInfo.objects.create(
+            customer_name='赵六', pid='110101199001010055', telephone='13700000000'
+        )
+        CardInfo.objects.create(
+            card_id='6222020000000022', cur_type='USD', open_date=timezone.now(),
+            open_money=Decimal('20.00'), balance=Decimal('20.00'), card_status='挂失',
+            password=make_password('123456'), customer_id=other.customer_id,
+        )
+
+        by_type = self.manager_client.get('/api/card/?cur_type=USD')
+        self.assertEqual(by_type.status_code, 200)
+        self.assertEqual([c['card_id'] for c in by_type.data['results']], ['6222020000000022'])
+
+        by_status = self.manager_client.get('/api/card/?card_status=挂失')
+        self.assertEqual([c['card_id'] for c in by_status.data['results']], ['6222020000000022'])
+
+        by_customer = self.manager_client.get(f'/api/card/?customer_id={self.customer.customer_id}')
+        self.assertEqual([c['card_id'] for c in by_customer.data['results']], [CARD_ID])
+
+        by_search = self.manager_client.get('/api/card/?search=0022')
+        self.assertEqual([c['card_id'] for c in by_search.data['results']], ['6222020000000022'])
+
+    def test_query_officer_can_list_and_retrieve_cards(self):
+        """查询员只读，但可以查看卡列表与详情"""
+        self.assertEqual(self.teller_client.get('/api/card/').status_code, 200)
+        self.assertEqual(self.teller_client.get(f'/api/card/{CARD_ID}/').status_code, 200)
+
+    def test_retrieve_and_update_nonexistent_card(self):
+        self.assertEqual(self.manager_client.get('/api/card/999999/').status_code, 404)
+        response = self.manager_client.put(
+            '/api/card/999999/', self._create_card_payload(self.customer.customer_id), format='json'
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_create_requires_password(self):
+        payload = self._create_card_payload(self.customer.customer_id)
+        payload.pop('password')
+        response = self.manager_client.post('/api/card/', payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('password', response.data)
+
+    def test_create_password_is_hashed(self):
+        response = self.manager_client.post(
+            '/api/card/', self._create_card_payload(self.customer.customer_id), format='json'
+        )
+        self.assertEqual(response.status_code, 201)
+        created = CardInfo.objects.get(card_id=response.data['card_id'])
+        self.assertTrue(check_password('123456', created.password))
+        self.assertNotEqual(created.password, '123456')
+
+    def test_create_rejects_negative_open_money(self):
+        payload = self._create_card_payload(self.customer.customer_id)
+        payload['open_money'] = '-1.00'
+        response = self.manager_client.post('/api/card/', payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('open_money', response.data)
+
+    def test_create_ignores_client_balance_and_status(self):
+        """客户端传入的余额与状态无效，初始余额恒等于开户金额"""
+        payload = self._create_card_payload(self.customer.customer_id)
+        payload['balance'] = '999.00'
+        payload['card_status'] = '挂失'
+        response = self.manager_client.post('/api/card/', payload, format='json')
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data['balance'], '50.00')
+        created = CardInfo.objects.get(card_id=response.data['card_id'])
+        self.assertEqual(created.card_status, '正常')
+
+    def test_update_type_and_password(self):
+        """编辑可改货币类型/开户日期并重置密码，密码同样哈希入库"""
+        response = self.manager_client.put(
+            f'/api/card/{CARD_ID}/', {
+                'cur_type': 'USD',
+                'open_date': timezone.now().isoformat(),
+                'open_money': '500.00',
+                'customer_id': self.customer.customer_id,
+                'password': 'newpass123',
+            }, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self._refresh_card()
+        self.assertEqual(self.card.cur_type, 'USD')
+        self.assertEqual(self.card.balance, Decimal('100.00'))
+        self.assertTrue(check_password('newpass123', self.card.password))
+
+    def test_update_cannot_change_balance_status_or_open_money(self):
+        """余额、卡状态与开户金额在编辑时均被忽略"""
+        response = self.manager_client.put(
+            f'/api/card/{CARD_ID}/', {
+                'cur_type': 'CNY',
+                'open_date': timezone.now().isoformat(),
+                'open_money': '500.00',
+                'balance': '0.00',
+                'card_status': '销户',
+                'customer_id': self.customer.customer_id,
+            }, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self._refresh_card()
+        self.assertEqual(self.card.balance, Decimal('100.00'))
+        self.assertEqual(self.card.card_status, '正常')
+        self.assertEqual(self.card.open_money, Decimal('100.00'))
+
+    def test_update_does_not_require_immutable_fields(self):
+        """编辑时不应强制提交不可修改的开户金额与归属客户"""
+        response = self.manager_client.put(
+            f'/api/card/{CARD_ID}/', {
+                'cur_type': 'USD',
+                'open_date': timezone.now().isoformat(),
+            }, format='json',
+        )
+        self.assertEqual(response.status_code, 200)
+        self._refresh_card()
+        self.assertEqual(self.card.cur_type, 'USD')
+        self.assertEqual(self.card.customer_id, self.customer.customer_id)
+        self.assertEqual(self.card.open_money, Decimal('100.00'))
+
+    def test_query_officer_cannot_update_card(self):
+        response = self.teller_client.put(
+            f'/api/card/{CARD_ID}/', self._create_card_payload(self.customer.customer_id), format='json'
+        )
+        self.assertEqual(response.status_code, 403)
+        self._refresh_card()
+        self.assertEqual(self.card.cur_type, 'CNY')
+
+    def test_unlock_rejected_when_not_lost(self):
+        response = self.manager_client.post(f'/api/card/{CARD_ID}/unlock/', {}, format='json')
+        self.assertEqual(response.status_code, 400)
+        self._refresh_card()
+        self.assertEqual(self.card.card_status, '正常')
+
+    def test_closed_card_cannot_change_status(self):
+        """销户后挂失/解挂/再次销卡都应被拒绝"""
+        self.card.balance = Decimal('0.00')
+        self.card.card_status = '销户'
+        self.card.save(update_fields=['balance', 'card_status'])
+
+        for action in ('report-loss', 'unlock', 'close'):
+            response = self.manager_client.post(f'/api/card/{CARD_ID}/{action}/', {}, format='json')
+            self.assertEqual(response.status_code, 400, msg=action)
+        self._refresh_card()
+        self.assertEqual(self.card.card_status, '销户')

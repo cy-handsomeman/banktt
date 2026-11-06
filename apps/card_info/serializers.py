@@ -32,6 +32,13 @@ class CardInfoSerializer(serializers.ModelSerializer):
             'card_status': {'read_only': True},
         }
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 编辑时开户金额与归属客户不可修改，也不应强制客户端重复提交
+        if self.instance is not None:
+            self.fields['open_money'].required = False
+            self.fields['customer_id'].required = False
+
     def validate(self, attrs):
         """新增时必须携带密码；开户金额只在新增时生效"""
         if self.instance is None and not attrs.get('password'):
