@@ -1,5 +1,6 @@
 import random
 import time
+from datetime import datetime, time as dt_time, timedelta
 from decimal import Decimal
 
 import django_filters
@@ -67,14 +68,27 @@ def _change_balance(card_id, delta):
 
 
 class TradeInfoFilter(django_filters.FilterSet):
-    """交易流水筛选：卡号、类型、交易日期范围"""
+    """交易流水筛选：卡号、类型、交易日期范围
 
-    start_date = django_filters.DateFilter(field_name='trans_date', lookup_expr='date__gte')
-    end_date = django_filters.DateFilter(field_name='trans_date', lookup_expr='date__lte')
+    注意：不使用 ``date__gte`` 等日期转换查询。MySQL 未导入时区表时
+    ``CONVERT_TZ`` 返回 NULL，会导致日期条件静默匹配不到任何记录；
+    改为按本地时区换算成带时区的时间范围后直接比较。
+    """
+
+    start_date = django_filters.DateFilter(method='filter_start_date')
+    end_date = django_filters.DateFilter(method='filter_end_date')
 
     class Meta:
         model = TradeInfo
         fields = ['trans_type', 'card_id']
+
+    def filter_start_date(self, queryset, name, value):
+        start = timezone.make_aware(datetime.combine(value, dt_time.min))
+        return queryset.filter(trans_date__gte=start)
+
+    def filter_end_date(self, queryset, name, value):
+        next_day = timezone.make_aware(datetime.combine(value + timedelta(days=1), dt_time.min))
+        return queryset.filter(trans_date__lt=next_day)
 
 
 class TradeInfoViewSet(

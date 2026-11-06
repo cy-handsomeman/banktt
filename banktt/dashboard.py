@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, time as dt_time, timedelta
 from decimal import Decimal
 
 from django.db.models import Sum
@@ -17,6 +17,12 @@ CARD_STATUS_CLOSED = '销户'
 TRANSFER_IN_TYPE = '转账转入'
 
 
+def _day_range(day):
+    """某天在本地时区的起止时间（带时区），避免依赖 MySQL 时区表的日期转换查询"""
+    start = timezone.make_aware(datetime.combine(day, dt_time.min))
+    return start, start + timedelta(days=1)
+
+
 def dashboard_page(request):
     return render(request, 'dashboard.html')
 
@@ -26,7 +32,10 @@ def dashboard_page(request):
 def dashboard_summary(request):
     """运营总览：今日交易、客户/银行卡总量、近 7 日趋势与最新流水"""
     today = timezone.localdate()
-    today_trades = TradeInfo.objects.filter(trans_date__date=today)
+    day_start, day_end = _day_range(today)
+    today_trades = TradeInfo.objects.filter(
+        trans_date__gte=day_start, trans_date__lt=day_end
+    )
 
     today_trade_count = today_trades.count()
     # 转账是双边记账，排除转入流水避免金额重复计算
@@ -43,9 +52,12 @@ def dashboard_summary(request):
     trend = []
     for offset in range(6, -1, -1):
         day = today - timedelta(days=offset)
+        start, end = _day_range(day)
         trend.append({
             'date': day.strftime('%m-%d'),
-            'count': TradeInfo.objects.filter(trans_date__date=day).count(),
+            'count': TradeInfo.objects.filter(
+                trans_date__gte=start, trans_date__lt=end
+            ).count(),
         })
 
     latest_trades = []

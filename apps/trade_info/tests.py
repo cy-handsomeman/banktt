@@ -1,3 +1,4 @@
+from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth.hashers import make_password
@@ -142,3 +143,21 @@ class FundFlowTests(APITestCase):
         )
         self.assertEqual(response.status_code, 201)
         self.assertEqual(self._balance(CARD_A), Decimal('10.00'))
+
+    def test_date_range_filter_matches_today(self):
+        """日期范围筛选：今日创建的交易必须能被今日区间命中（MySQL 无时区表也不受影响）"""
+        self.client.post(
+            '/api/trade/',
+            {'trans_type': '存款', 'card_id': CARD_A, 'trans_money': '20.00'},
+            format='json',
+        )
+        today = timezone.localdate().isoformat()
+        response = self.client.get(f'/api/trade/?start_date={today}&end_date={today}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 1)
+        self.assertEqual(response.data['results'][0]['trans_type'], '存款')
+
+        past = (timezone.localdate() - timedelta(days=3)).isoformat()
+        response = self.client.get(f'/api/trade/?start_date={past}&end_date={past}')
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data['count'], 0)
