@@ -38,7 +38,7 @@ function renderTable(data) {
 function showToast(msg, duration = 2000) {
     let toastEl = $('#dynamicToast');
     if (toastEl.length === 0) {
-        $('body').append('<div id="dynamicToast" style="position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#2c3e50; color:white; padding:10px 20px; border-radius:40px; z-index:1100; font-size:0.85rem; box-shadow:0 5px 12px rgba(0,0,0,0.2); opacity:0; transition:0.2s; pointer-events:none;"></div>');
+        $('body').append('<div id="dynamicToast" style="position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:#2c3e50; color:white; padding:10px 20px; border-radius:40px; z-index:2000; font-size:0.85rem; box-shadow:0 5px 12px rgba(0,0,0,0.2); opacity:0; transition:0.2s; pointer-events:none;"></div>');
         toastEl = $('#dynamicToast');
     }
     toastEl.text(msg).css('opacity', '1');
