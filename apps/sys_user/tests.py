@@ -58,6 +58,24 @@ class PermissionMatrixTests(APITestCase):
                 self.assertEqual(self.manager_client.get(path).status_code, 403)
                 self.assertEqual(self.teller_client.get(path).status_code, 403)
 
+    def test_duplicate_fields_have_readable_messages(self):
+        """重复用户名 / 身份证号应返回自定义中文提示，而不是模型名兜底文案"""
+        payload = {
+            'user_name': 'new_user_a',
+            'password': 'Test@12345',
+            'pid': self.admin.pid,
+            'mobile': '13900009998',
+        }
+        response = self.admin_client.post('/api/sys_user/', payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(str(response.data['pid'][0]), '该身份证号已存在，请勿重复录入')
+
+        payload['user_name'] = self.admin.user_name
+        payload['pid'] = '110101199001010098'
+        response = self.admin_client.post('/api/sys_user/', payload, format='json')
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(str(response.data['user_name'][0]), '该用户名已存在，请更换')
+
     def test_business_read_allows_any_authenticated_role(self):
         for client in (self.admin_client, self.manager_client, self.teller_client):
             self.assertEqual(client.get('/api/user/').status_code, 200)

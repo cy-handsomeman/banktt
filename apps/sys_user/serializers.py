@@ -16,6 +16,10 @@ class SysUserSerializer(serializers.ModelSerializer):
         fields = '__all__'
         extra_kwargs = {
             'password': {'write_only': True, 'required': False},
+            # 唯一性由 validate_user_name / validate_pid 统一校验并给出中文提示，
+            # 关闭 DRF 自动生成的唯一校验器，避免出现“具有 pid 的 sys user 已存在”这类模型名文案
+            'user_name': {'validators': []},
+            'pid': {'validators': []},
         }
 
     def validate(self, attrs):
