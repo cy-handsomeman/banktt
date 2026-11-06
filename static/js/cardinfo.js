@@ -191,9 +191,10 @@ function addItem(payload) {
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(payload)
-    }).then(() => {
+    }).then(res => {
         fetchList();
-        showToast("新增成功", 1500);
+        const newCardId = res && (res.card_id || (res.data && res.data.card_id));
+        showToast(newCardId ? `开卡成功，卡号：${newCardId}` : "新增成功", 2500);
     }).catch(err => {
         console.error("新增银行卡失败:", err);
         showToast(parseApiError(err, '新增银行卡失败'), 2500);
@@ -251,12 +252,45 @@ function showToast(msg, duration = 2000) {
     toastTimer = setTimeout(() => { toastEl.css('opacity', '0'); }, duration);
 }
 
+let customersLoaded = false;
+function loadCustomers(force) {
+    if (customersLoaded && !force) { return Promise.resolve(); }
+    return $.ajax({
+        url: '/api/user/options/',
+        method: 'GET',
+        dataType: 'json',
+        timeout: 5000
+    }).then(list => {
+        const $select = $('#customer_id');
+        $select.empty();
+        if (!list || list.length === 0) {
+            $select.append('<option value="">暂无客户，请先在客户管理中新增</option>');
+            customersLoaded = true;
+            showToast('暂无可选客户，请先新增客户后再开卡', 2500);
+            return [];
+        }
+        $select.append('<option value="">请选择客户</option>');
+        list.forEach(c => {
+            $select.append(`<option value="${c.customer_id}">#${c.customer_id} ${escapeHtml(c.customer_name)}</option>`);
+        });
+        customersLoaded = true;
+        return list;
+    }).catch(err => {
+        console.error('加载客户列表失败:', err);
+        showToast(parseApiError(err, '加载客户列表失败'), 2500);
+        return [];
+    });
+}
+
 let currentMode = 'add';
 function openAddModal() {
     currentMode = 'add';
     $('#modalTitle').text('新增银行卡');
     $('#dataForm')[0].reset();
     $('#editCardId').val('');
+    $('#card_id').val('').prop('placeholder', '保存后由系统自动生成');
+    $('#customer_id').prop('disabled', false);
+    loadCustomers(true);
     $('#dataModal').addClass('active');
 }
 
@@ -272,7 +306,8 @@ function openEditModal(cardId) {
         const dt = item.open_date.replace(' ', 'T').slice(0, 16);
         $('#open_date').val(dt);
     }
-    $('#customer_id').val(item.customer_id);
+    loadCustomers().then(() => $('#customer_id').val(item.customer_id));
+    $('#customer_id').prop('disabled', true);
     $('#open_money').val(item.open_money);
     $('#balance').val(item.balance);
     $('#password').val('').prop('placeholder', '不修改请留空');
@@ -281,35 +316,30 @@ function openEditModal(cardId) {
 
 function closeModal() { 
     $('#dataModal').removeClass('active');
-    $('#card_id').prop('readonly', false);
+    $('#card_id').prop('readonly', true);
+    $('#customer_id').prop('disabled', false);
     $('#password').prop('placeholder', '请输入密码');
 }
 
 function onSave() {
-    const cardId = $('#card_id').val().trim();
     const curType = $('#cur_type').val();
     const openDate = $('#open_date').val();
     const customerId = parseInt($('#customer_id').val());
     const openMoney = parseFloat($('#open_money').val());
-    const balance = parseFloat($('#balance').val());
     const password = $('#password').val();
-    
-    if (!cardId) { showToast("卡号不能为空", 1500); return; }
+
     if (!curType) { showToast("请选择货币类型", 1500); return; }
     if (!openDate) { showToast("请选择开户日期", 1500); return; }
-    if (!customerId) { showToast("用户ID不能为空", 1500); return; }
+    if (!customerId) { showToast("请选择客户", 1500); return; }
     if (!openMoney && openMoney !== 0) { showToast("开户金额不能为空", 1500); return; }
-    if (!balance && balance !== 0) { showToast("余额不能为空", 1500); return; }
-    
+
     const payload = {
-        card_id: cardId,
         cur_type: curType,
         open_date: openDate.replace('T', ' ') + ':00',
         customer_id: customerId,
-        open_money: openMoney,
-        balance: balance
+        open_money: openMoney
     };
-    
+
     if (currentMode === 'add') {
         if (!password) { showToast("密码不能为空", 1500); return; }
         payload.password = password;
@@ -340,6 +370,7 @@ $(document).ready(function() {
         });
     }
 
+    loadCustomers();
     fetchList();
     $('#refreshBtn').on('click', function() { paginationInfo.currentPage = 1; fetchList(1); showToast("已刷新", 1500); });
     $('#openAddModalBtn').on('click', openAddModal);

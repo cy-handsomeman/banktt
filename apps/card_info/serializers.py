@@ -1,12 +1,22 @@
-import re
+import random
+import string
 
 from django.contrib.auth.hashers import make_password
+from django.db import IntegrityError
 from rest_framework import serializers
 
 from apps.card_info.models import CardInfo
 from apps.user_info.models import UserInfo
 
-CARD_ID_PATTERN = re.compile(r'^\d{6,20}$')
+CARD_BIN = '622202'
+CARD_ID_LENGTH = 16
+CARD_ID_ATTEMPTS = 5
+
+
+def generate_card_id():
+    """生成 16 位卡号：固定卡 BIN + 随机数字，保证视觉上不可猜测"""
+    suffix_length = CARD_ID_LENGTH - len(CARD_BIN)
+    return CARD_BIN + ''.join(random.choices(string.digits, k=suffix_length))
 
 
 class CardInfoSerializer(serializers.ModelSerializer):
@@ -15,6 +25,8 @@ class CardInfoSerializer(serializers.ModelSerializer):
         fields = '__all__'
         extra_kwargs = {
             'password': {'write_only': True, 'required': False},
+            # 卡号由系统自动生成，前端不可指定
+            'card_id': {'read_only': True},
             # 余额与卡状态只能通过交易 / 卡状态动作变动，禁止直接改
             'balance': {'read_only': True},
             'card_status': {'read_only': True},
@@ -31,15 +43,25 @@ class CardInfoSerializer(serializers.ModelSerializer):
             # 开户后开户金额不可修改，余额只能由交易产生
             attrs.pop('open_money', None)
             attrs.pop('balance', None)
+            # 卡归属客户不可变更，避免把卡"过户"到其他客户
+            customer_id = attrs.get('customer_id')
+            if customer_id is not None and customer_id != self.instance.customer_id:
+                raise serializers.ValidationError({'customer_id': '银行卡归属客户不可修改'})
+            attrs.pop('customer_id', None)
         return attrs
 
-    def validate_card_id(self, value):
-        """卡号格式校验：新建时必须是 6-20 位数字；历史卡号保持原值时不拦截"""
-        if self.instance is not None and value == self.instance.card_id:
-            return value
-        if not CARD_ID_PATTERN.fullmatch(value or ''):
-            raise serializers.ValidationError('卡号必须为 6-20 位数字')
-        return value
+    def create(self, validated_data):
+        """由系统生成唯一卡号；极端并发下主键冲突则重试"""
+        for _ in range(CARD_ID_ATTEMPTS):
+            card_id = generate_card_id()
+            if CardInfo.objects.filter(card_id=card_id).exists():
+                continue
+            validated_data['card_id'] = card_id
+            try:
+                return super().create(validated_data)
+            except IntegrityError:
+                continue
+        raise serializers.ValidationError({'card_id': '卡号生成冲突，请重试'})
 
     def validate_password(self, value):
         """入库前统一做哈希，禁止明文落库"""
