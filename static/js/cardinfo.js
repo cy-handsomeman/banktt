@@ -31,12 +31,15 @@ function renderTable(data) {
         if (canWriteBusiness && status !== '销户') {
             statusActions += `<button class="status-btn" data-id="${escapeHtml(item.card_id)}" data-action="close" title="销卡">销卡</button>`;
         }
+        // td 保持 table-cell 才能和表头列宽一致，flex 布局交给内部的 div
         const actionHtml = canWriteBusiness
-            ? `<td class="action-buttons">
-                    <button class="edit-btn" data-id="${escapeHtml(item.card_id)}" title="编辑"><i class="fas fa-edit"></i></button>
-                    ${statusActions}
+            ? `<td>
+                    <div class="action-buttons">
+                        <button class="edit-btn" data-id="${escapeHtml(item.card_id)}" title="编辑"><i class="fas fa-edit"></i></button>
+                        ${statusActions}
+                    </div>
                </td>`
-            : '<td class="action-buttons">—</td>';
+            : '<td><div class="action-buttons">—</div></td>';
         const customerText = item.customer_name
             ? `${escapeHtml(item.customer_name)}（#${item.customer_id}）`
             : `#${item.customer_id}`;

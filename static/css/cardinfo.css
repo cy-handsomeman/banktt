@@ -23,8 +23,14 @@ body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background:
 .data-table th:nth-child(5), .data-table td:nth-child(5) { width: 110px; text-align: right; }
 .data-table th:nth-child(6), .data-table td:nth-child(6) { width: 130px; }
 .data-table th:nth-child(7), .data-table td:nth-child(7) { width: 100px; }
-.data-table th:nth-child(8), .data-table td:nth-child(8) { width: 120px; }
-.action-buttons { display: flex; justify-content: center; gap: 12px; }
+/* 操作列需要容纳编辑图标 + 挂失/解挂 + 销卡，列宽与表头都居中 */
+.data-table th:nth-child(8), .data-table td:nth-child(8) { width: 220px; }
+.data-table th:nth-child(8) { text-align: center; }
+.action-buttons { display: flex; justify-content: center; align-items: center; gap: 12px; }
+/* 间距统一由 flex gap 控制，避免按钮自带 margin 造成左右不对称 */
+.data-table .action-buttons button { margin-right: 0; }
+/* 挂失/解挂/销卡是文字按钮，宽度应由内容决定，不能被通用图标按钮规则压成 29px */
+.data-table .action-buttons .status-btn { width: auto; height: auto; }
 .edit-btn, .delete-btn { background: none; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px 6px; border-radius: 8px; }
 .edit-btn { color: #2c6e9e; }
 .edit-btn:hover { background: #e6f0fa; }
