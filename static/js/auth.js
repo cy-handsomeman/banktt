@@ -11,11 +11,24 @@
 
     applyToken(sessionStorage.getItem(TOKEN_KEY));
 
+    function redirectToLogin() {
+        // 子页面运行在 iframe 中时，登录页不能嵌在内容区里，必须让顶层窗口跳转
+        try {
+            if (window.top && window.top !== window.self) {
+                window.top.location.href = '/login/';
+                return;
+            }
+        } catch (e) {
+            // 跨域无法访问顶层窗口时，退回当前窗口跳转
+        }
+        window.location.href = '/login/';
+    }
+
     function clearAndRedirect() {
         sessionStorage.clear();
         // 同步清除页面鉴权 Cookie，避免会话失效后仍能打开管理页面
         document.cookie = 'page_token=; path=/; max-age=0; SameSite=Lax';
-        window.location.href = '/login/';
+        redirectToLogin();
     }
 
     var refreshInFlight = false;

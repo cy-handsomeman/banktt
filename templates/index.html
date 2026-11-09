@@ -76,7 +76,7 @@
         </main>
     </div>
 
-    <script src="/static/js/auth.js?v=20261106"></script>
+    <script src="/static/js/auth.js?v=20261109b"></script>
     <script>
         // 用户下拉菜单控制
         function toggleUserDropdown() {
@@ -351,6 +351,16 @@
             const iframe = document.getElementById('contentIframe');
             if (iframe) {
                 iframe.addEventListener('load', function() {
+                    try {
+                        // 页面鉴权 Cookie 失效时子页面会被重定向到登录页；
+                        // 此时不能在 iframe 里嵌套展示登录页，必须让整个窗口回到登录页
+                        if (iframe.contentWindow.location.pathname === '/login/') {
+                            window.location.href = '/login/';
+                            return;
+                        }
+                    } catch (e) {
+                        console.log('无法读取 iframe 地址（可能跨域）');
+                    }
                     try {
                         const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
                         if (iframeDoc.__clickBound) {
