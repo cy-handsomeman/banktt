@@ -22,6 +22,9 @@ def generate_card_id():
 
 
 class CardInfoSerializer(serializers.ModelSerializer):
+    # 卡表只存 customer_id，列表直接显示数字不直观，这里补一个只读的客户姓名
+    customer_name = serializers.SerializerMethodField()
+
     class Meta:
         model = CardInfo
         fields = '__all__'
@@ -71,6 +74,15 @@ class CardInfoSerializer(serializers.ModelSerializer):
             except IntegrityError:
                 continue
         raise serializers.ValidationError({'card_id': '卡号生成冲突，请重试'})
+
+    def get_customer_name(self, obj):
+        """按 customer_id 关联查询客户姓名；客户不存在时返回空字符串"""
+        return (
+            UserInfo.objects.filter(customer_id=obj.customer_id)
+            .values_list('customer_name', flat=True)
+            .first()
+            or ''
+        )
 
     def validate_password(self, value):
         """入库前统一做哈希，禁止明文落库"""

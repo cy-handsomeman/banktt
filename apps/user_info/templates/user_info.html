@@ -6,7 +6,7 @@
     <title>客户信息管理系统</title>
     <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
-    <link rel="stylesheet" href="/static/css/userinfo.css?v=20261106">
+    <link rel="stylesheet" href="/static/css/userinfo.css?v=20261109a">
     <link rel="stylesheet" href="/static/css/theme.css?v=20261106">
 </head>
 <body>
@@ -22,7 +22,7 @@
         <table class="user-table" id="userTable">
             <thead>
                 <tr>
-                    <th>客户ID</th><th>开户名</th><th>身份证号</th><th>联系电话</th><th>居住地址</th><th width="100">操作</th>
+                    <th>客户ID</th><th>开户名</th><th>身份证号</th><th>联系电话</th><th>居住地址</th><th width="130">操作</th>
                 </tr>
             </thead>
             <tbody id="userTableBody">
@@ -78,8 +78,32 @@
     </div>
 </div>
 
+<div id="cardsModal" class="modal-overlay">
+    <div class="modal-container modal-wide">
+        <div class="modal-header">
+            <h3 id="cardsModalTitle">名下银行卡</h3>
+            <button class="modal-close" id="closeCardsModalBtn">&times;</button>
+        </div>
+        <div class="modal-body">
+            <table class="cards-table">
+                <thead>
+                    <tr>
+                        <th>卡号</th><th>货币类型</th><th>卡状态</th><th>开户日期</th><th>余额</th>
+                    </tr>
+                </thead>
+                <tbody id="cardsBody">
+                    <tr><td colspan="5" class="empty-cell">加载中...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="btn-cancel" id="closeCardsBtn">关闭</button>
+        </div>
+    </div>
+</div>
+
 <script src="/static/js/auth.js?v=20261106"></script>
 <script>window.__serverCanWrite = {{ can_write_business|yesno:"true,false" }};</script>
-<script src="/static/js/userinfo.js?v=20261106b"></script>
+<script src="/static/js/userinfo.js?v=20261109a"></script>
 </body>
 </html>

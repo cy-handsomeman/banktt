@@ -18,11 +18,13 @@ function renderUserTable(users) {
     let htmlStr = '';
     users.forEach(user => {
         const pidDisplay = (user.pid !== null && user.pid !== undefined && user.pid !== '') ? user.pid : '—';
-        const actionHtml = canWriteBusiness
-            ? `<td class="action-buttons">
-                    <button class="edit-btn" data-id="${user.customer_id}" title="编辑"><i class="fas fa-edit"></i></button>
-               </td>`
-            : '<td class="action-buttons">—</td>';
+        // 查看名下银行卡对所有角色开放；编辑仅写角色可见
+        const actionHtml = `<td class="action-buttons">
+                <button class="view-cards-btn" data-id="${user.customer_id}" title="查看名下银行卡"><i class="fas fa-credit-card"></i></button>
+                ${canWriteBusiness
+                    ? `<button class="edit-btn" data-id="${user.customer_id}" title="编辑"><i class="fas fa-edit"></i></button>`
+                    : ''}
+           </td>`;
         htmlStr += `
             <tr data-id="${user.customer_id}">
                 <td>${user.customer_id}</td>
@@ -38,6 +40,10 @@ function renderUserTable(users) {
     $('.edit-btn').off('click').on('click', function() {
         const userId = parseInt($(this).data('id'));
         openEditModal(userId);
+    });
+    $('.view-cards-btn').off('click').on('click', function() {
+        const userId = parseInt($(this).data('id'));
+        openCardsModal(userId);
     });
 }
 
@@ -253,6 +259,66 @@ function closeModal() {
     $('#userModal').removeClass('active');
 }
 
+function renderCustomerCards(cards) {
+    const tbody = $('#cardsBody');
+    if (!cards || cards.length === 0) {
+        tbody.html('<tr><td colspan="5" class="empty-cell">该客户名下暂无银行卡</td></tr>');
+        return;
+    }
+    let htmlStr = '';
+    cards.forEach(card => {
+        const status = card.card_status || '正常';
+        const statusClass = status === '挂失' ? 'pending' : (status === '销户' ? 'muted' : '');
+        const openDate = card.open_date ? escapeHtml(String(card.open_date).replace('T', ' ').slice(0, 19)) : '—';
+        const balance = (card.balance !== null && card.balance !== undefined)
+            ? '¥' + parseFloat(card.balance).toFixed(2)
+            : '—';
+        htmlStr += `<tr>
+            <td>${escapeHtml(card.card_id)}</td>
+            <td>${escapeHtml(card.cur_type || '—')}</td>
+            <td><span class="card-pill ${statusClass}">${escapeHtml(status)}</span></td>
+            <td>${openDate}</td>
+            <td>${balance}</td>
+        </tr>`;
+    });
+    tbody.html(htmlStr);
+}
+
+function openCardsModal(userId) {
+    const user = currentUserList.find(u => u.customer_id === userId);
+    const displayName = user ? `${user.customer_name}（#${userId}）` : `#${userId}`;
+    $('#cardsModalTitle').text(`名下银行卡 - ${displayName}`);
+    $('#cardsBody').html('<tr><td colspan="5" class="empty-cell">加载中...</td></tr>');
+    $('#cardsModal').addClass('active');
+
+    // 复用银行卡列表接口，按 customer_id 过滤，一次最多取 100 张
+    $.ajax({
+        url: '/api/card/',
+        method: 'GET',
+        data: { customer_id: userId, page_size: 100 },
+        dataType: 'json',
+        timeout: 5000
+    }).then(response => {
+        let cards = [];
+        if (Array.isArray(response)) {
+            cards = response;
+        } else if (response && Array.isArray(response.results)) {
+            cards = response.results;
+        } else if (response && Array.isArray(response.data)) {
+            cards = response.data;
+        }
+        renderCustomerCards(cards);
+    }).catch(err => {
+        console.error('获取客户名下银行卡失败:', err);
+        $('#cardsBody').html('<tr><td colspan="5" class="empty-cell">加载失败，请稍后重试</td></tr>');
+        showToast(parseApiError(err, '获取客户名下银行卡失败'), 2500);
+    });
+}
+
+function closeCardsModal() {
+    $('#cardsModal').removeClass('active');
+}
+
 function onSaveUser() {
     const customerName = $('#customer_name').val().trim();
     if (!customerName) {
@@ -338,6 +404,10 @@ $(document).ready(function() {
     $('#submitUserBtn').on('click', onSaveUser);
     $('#userModal').on('click', function(e) {
         if ($(e.target).hasClass('modal-overlay')) closeModal();
+    });
+    $('#closeCardsModalBtn, #closeCardsBtn').on('click', closeCardsModal);
+    $('#cardsModal').on('click', function(e) {
+        if ($(e.target).hasClass('modal-overlay')) closeCardsModal();
     });
     $('#userForm').on('submit', function(e) { e.preventDefault(); return false; });
     

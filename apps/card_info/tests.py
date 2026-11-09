@@ -219,6 +219,36 @@ class CardStatusTests(APITestCase):
         self.assertEqual(detail.data['card_id'], CARD_ID)
         self.assertNotIn('password', detail.data)
 
+    def test_card_list_exposes_customer_name(self):
+        """卡列表和详情都要返回客户姓名，前端不再只显示数字客户ID"""
+        list_resp = self.manager_client.get('/api/card/')
+        self.assertEqual(list_resp.status_code, 200)
+        row = list_resp.data['results'][0]
+        self.assertEqual(row['customer_id'], self.customer.customer_id)
+        self.assertEqual(row['customer_name'], '王五')
+
+        detail = self.manager_client.get(f'/api/card/{CARD_ID}/')
+        self.assertEqual(detail.status_code, 200)
+        self.assertEqual(detail.data['customer_name'], '王五')
+
+    def test_customer_cards_filter_used_by_customer_page(self):
+        """客户管理页按 customer_id 过滤时，只返回该客户名下的卡"""
+        other = UserInfo.objects.create(
+            customer_name='赵六', pid='110101199001010055', telephone='13700000000'
+        )
+        CardInfo.objects.create(
+            card_id='6222020000000022', cur_type='美元', open_date=timezone.now(),
+            open_money=Decimal('20.00'), balance=Decimal('20.00'), card_status='正常',
+            password=make_password('123456'), customer_id=other.customer_id,
+        )
+        response = self.manager_client.get('/api/card/', {
+            'customer_id': self.customer.customer_id,
+            'page_size': 100,
+        })
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual([c['card_id'] for c in response.data['results']], [CARD_ID])
+        self.assertEqual(response.data['results'][0]['customer_name'], '王五')
+
     def test_list_filters_and_search(self):
         """列表支持按货币类型、状态、客户与卡号搜索"""
         other = UserInfo.objects.create(

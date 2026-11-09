@@ -37,6 +37,9 @@ function renderTable(data) {
                     ${statusActions}
                </td>`
             : '<td class="action-buttons">—</td>';
+        const customerText = item.customer_name
+            ? `${escapeHtml(item.customer_name)}（#${item.customer_id}）`
+            : `#${item.customer_id}`;
         html += `<tr data-id="${item.card_id}">
             <td class="card-id-cell">${escapeHtml(item.card_id)}</td>
             <td><strong>${escapeHtml(item.cur_type)}</strong></td>
@@ -44,7 +47,7 @@ function renderTable(data) {
             <td>${openDate}</td>
             <td class="money-cell">${openMoney}</td>
             <td class="money-cell">${balance}</td>
-            <td>${item.customer_id}</td>
+            <td>${customerText}</td>
             ${actionHtml}
         </tr>`;
     });
