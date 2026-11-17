@@ -113,20 +113,33 @@ window.parseApiError = function (xhr, fallback) {
     return fallback || '操作失败';
 };
 
-// 当前登录用户的角色 ID（缓存一次，页面内复用）
-window.getUserRoles = function () {
-    if (window.__userRolesPromise) {
-        return window.__userRolesPromise;
+// 当前登录用户信息（一次请求，页面内复用）
+window.__userMenuPromise = null;
+
+function fetchUserMenu() {
+    if (!window.__userMenuPromise) {
+        window.__userMenuPromise = $.ajax({
+            url: '/api/get_user_menu/',
+            method: 'GET'
+        }).catch(function () {
+            return {};
+        });
     }
-    window.__userRolesPromise = $.ajax({
-        url: '/api/get_user_menu/',
-        method: 'GET'
-    }).then(function (res) {
+    return window.__userMenuPromise;
+}
+
+// 当前登录用户的角色 ID
+window.getUserRoles = function () {
+    return fetchUserMenu().then(function (res) {
         return (res && res.user_roles) || [];
-    }).catch(function () {
-        return [];
     });
-    return window.__userRolesPromise;
+};
+
+// 当前登录用户的用户 ID（用于"不能修改自己的管理员角色"等前端判断）
+window.getCurrentUserId = function () {
+    return fetchUserMenu().then(function (res) {
+        return (res && res.user_id !== null && res.user_id !== undefined) ? res.user_id : null;
+    });
 };
 
 // 管理员(1) 与 柜员(2) 具备业务写权限；查询员(3) 只读

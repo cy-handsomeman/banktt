@@ -321,6 +321,50 @@ function fetchRoleList() {
     });
 }
 
+// 当前登录用户 ID，用于判断"不能取消自己的管理员角色"
+let currentLoginUserId = null;
+
+function getCurrentLoginUserId() {
+    if (currentLoginUserId !== null) {
+        return Promise.resolve(currentLoginUserId);
+    }
+    if (typeof window.getCurrentUserId !== 'function') {
+        return Promise.resolve(null);
+    }
+    return window.getCurrentUserId().then(function (id) {
+        currentLoginUserId = id;
+        return id;
+    });
+}
+
+function renderRoleOptionHtml(roleId, roleName, checked, locked) {
+    const disabledAttr = locked ? 'disabled' : '';
+    const labelStyle = locked ? ' style="opacity:.5;cursor:not-allowed;"' : '';
+    return `
+        <label class="role-option"${labelStyle}>
+            <input type="radio" name="role" value="${roleId}" ${checked} ${disabledAttr}>
+            <span>${roleName}</span>
+        </label>
+    `;
+}
+
+// 单选策略：一个用户最多一个角色；自己是管理员时整个角色不可改（不能取消自己的管理员角色）
+function buildRoleOptionsHtml(userRoleIds, userId) {
+    const isSelf = currentLoginUserId !== null && String(userId) === String(currentLoginUserId);
+    const selfIsAdmin = isSelf && userRoleIds.includes('1');
+    let htmlStr = '';
+    roleList.forEach(role => {
+        const roleId = (role.role_id || role.id || role.id_field).toString();
+        const roleName = role.role_name || role.name || '未知角色';
+        const checked = userRoleIds.includes(roleId) ? 'checked' : '';
+        htmlStr += renderRoleOptionHtml(roleId, roleName, checked, selfIsAdmin);
+    });
+    if (selfIsAdmin) {
+        htmlStr += '<div style="color:#8994a0;font-size:12px;line-height:1.6;margin-top:4px;">当前登录账号是管理员，不能取消自己的管理员角色，也不能改为其他角色。</div>';
+    }
+    return htmlStr;
+}
+
 function renderRoleOptions(userId = null) {
     const container = $('#roleOptionsContainer');
     if (!roleList || roleList.length === 0) {
@@ -335,53 +379,31 @@ function renderRoleOptions(userId = null) {
         }).then(response => {
             const userRoles = response.roles || [];
             const userRoleIds = userRoles.map(r => r.role_id.toString());
-            
-            let htmlStr = '';
-            roleList.forEach(role => {
-                const roleId = (role.role_id || role.id || role.id_field).toString();
-                const roleName = role.role_name || role.name || '未知角色';
-                const isChecked = userRoleIds.includes(roleId) ? 'checked' : '';
-                htmlStr += `
-                    <label class="role-option">
-                        <input type="checkbox" name="role" value="${roleId}" ${isChecked}>
-                        <span>${roleName}</span>
-                    </label>
-                `;
-            });
-            container.html(htmlStr);
+            container.html(buildRoleOptionsHtml(userRoleIds, userId));
         }).catch(err => {
             console.error("获取用户角色失败:", err);
             showToast(parseApiError(err, '获取用户角色失败'), 2500);
             container.html('<div style="text-align: center; color: #e03a3a; padding: 20px;">加载失败，请稍后重试</div>');
         });
     } else {
-        let htmlStr = '';
-        roleList.forEach(role => {
-            const roleId = role.role_id || role.id || role.id_field;
-            const roleName = role.role_name || role.name || '未知角色';
-            htmlStr += `
-                <label class="role-option">
-                    <input type="checkbox" name="role" value="${roleId}">
-                    <span>${roleName}</span>
-                </label>
-            `;
-        });
-        container.html(htmlStr);
+        container.html(buildRoleOptionsHtml([], userId));
     }
 }
 
 function openRoleConfigModal(userId) {
     $('#roleUserId').val(userId);
-    
-    if (roleList.length === 0) {
-        fetchRoleList().then(() => {
+    // 先拿到当前登录用户 ID，才能标记"自己的管理员角色"为不可取消
+    getCurrentLoginUserId().then(() => {
+        if (roleList.length === 0) {
+            fetchRoleList().then(() => {
+                renderRoleOptions(userId);
+                $('#roleModal').addClass('active');
+            });
+        } else {
             renderRoleOptions(userId);
             $('#roleModal').addClass('active');
-        });
-    } else {
-        renderRoleOptions(userId);
-        $('#roleModal').addClass('active');
-    }
+        }
+    });
 }
 
 function closeRoleConfigModal() {
@@ -399,67 +421,21 @@ function submitRoleConfig() {
         return;
     }
     
+    // 单选：0 个表示清空角色，1 个表示设置该角色；由后端原子替换
+    const roleId = selectedRoleIds.length ? selectedRoleIds[0] : null;
+    
     $.ajax({
-        url: `/api/sys_user_role/user/${userId}/`,
-        method: 'GET'
-    }).then(response => {
-        const currentRoles = response.roles || [];
-        const currentRoleIds = currentRoles.map(r => r.role_id);
-        
-        const rolesToAdd = selectedRoleIds.filter(rId => !currentRoleIds.includes(rId));
-        const rolesToRemove = currentRoleIds.filter(rId => !selectedRoleIds.includes(rId));
-        
-        let doneCount = 0;
-        let failCount = 0;
-        let firstError = null;
-        let totalOperations = rolesToAdd.length + rolesToRemove.length;
-        
-        if (totalOperations === 0) {
-            closeRoleConfigModal();
-            showToast("角色配置未变化", 1500);
-            return;
-        }
-        
-        function checkComplete() {
-            if (doneCount + failCount !== totalOperations) { return; }
-            if (failCount === 0) {
-                closeRoleConfigModal();
-                showToast("角色配置成功", 1500);
-            } else {
-                showToast(parseApiError(firstError, `${failCount} 项角色配置失败`), 2500);
-            }
-            fetchUserList();
-        }
-        
-        function onSuccess() { doneCount++; checkComplete(); }
-        function onFail(err) { failCount++; if (!firstError) firstError = err; checkComplete(); }
-        
-        rolesToRemove.forEach(roleId => {
-            $.ajax({
-                url: `/api/sys_user_role/batch_remove/`,
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    user_ids: [parseInt(userId)],
-                    role_id: roleId
-                })
-            }).then(onSuccess).catch(onFail);
-        });
-        
-        rolesToAdd.forEach(roleId => {
-            $.ajax({
-                url: `/api/sys_user_role/`,
-                method: 'POST',
-                contentType: 'application/json',
-                data: JSON.stringify({
-                    user_id: parseInt(userId),
-                    role_id: roleId
-                })
-            }).then(onSuccess).catch(onFail);
-        });
+        url: `/api/sys_user_role/user/${userId}/set_role/`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ role_id: roleId })
+    }).then(() => {
+        closeRoleConfigModal();
+        showToast(roleId === null ? "角色已清空" : "角色配置成功", 1500);
+        fetchUserList();
     }).catch(err => {
-        console.error("获取用户角色失败:", err);
-        showToast("配置角色失败", 2000);
+        console.error("配置角色失败:", err);
+        showToast(parseApiError(err, '配置角色失败'), 2500);
     });
 }
 

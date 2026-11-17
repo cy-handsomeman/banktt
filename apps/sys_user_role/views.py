@@ -36,6 +36,16 @@ def _super_admin_user_ids():
     )
 
 
+def _role_name(role_id):
+    """角色名称用于提示文案；角色被删等异常情况退化为编号"""
+    return (
+        SysRole.objects.filter(role_id=role_id)
+        .values_list('role_name', flat=True)
+        .first()
+        or f'角色{role_id}'
+    )
+
+
 def _guard_super_admin_removal(request, user_ids, removing_super_admin):
     """保护超管绑定：不能移除自己的，也不能让系统失去最后一名超管"""
     if not removing_super_admin:
@@ -171,6 +181,69 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
         serializer = self.get_serializer(user_roles, many=True)
         return Response({'user_id': parsed_user_id, 'roles': serializer.data})
 
+    @action(detail=False, methods=['post'], url_path='user/(?P<user_id>[^/.]+)/set_role')
+    def set_user_role(self, request, user_id=None):
+        """
+        设置用户的唯一角色（替换式，单事务内完成）
+        POST /api/sys_user_role/user/{user_id}/set_role/
+        { "role_id": 2 }        role_id 传 null 表示清空角色
+        """
+        parsed_user_id = _to_int(user_id)
+        if parsed_user_id is None:
+            raise ValidationError({'detail': '用户ID格式不正确'})
+        if not SysUser.objects.filter(user_id=parsed_user_id).exists():
+            return Response(
+                {'detail': '用户不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        raw_role_id = request.data.get('role_id')
+        clearing = raw_role_id in (None, '')
+        role_id = None if clearing else _to_int(raw_role_id)
+        if not clearing and role_id is None:
+            return Response(
+                {'detail': 'role_id 必须为整数'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if role_id is not None and not SysRole.objects.filter(role_id=role_id).exists():
+            return Response(
+                {'detail': '角色不存在'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        current_role_ids = set(
+            SysUserRole.objects.filter(user_id=parsed_user_id)
+            .values_list('role_id', flat=True)
+        )
+        # 目标将失去管理员角色（换成其他角色或清空）时，走超管保护：
+        # 不能改动自己的管理员角色，也不能让系统失去最后一名管理员
+        removing_super_admin = (
+            SUPER_ADMIN_ROLE_ID in current_role_ids
+            and role_id != SUPER_ADMIN_ROLE_ID
+        )
+        _guard_super_admin_removal(
+            request, [parsed_user_id], removing_super_admin
+        )
+
+        try:
+            with transaction.atomic():
+                SysUserRole.objects.filter(user_id=parsed_user_id).delete()
+                if role_id is not None:
+                    SysUserRole.objects.create(
+                        user_id=parsed_user_id, role_id=role_id
+                    )
+        except IntegrityError:
+            return Response(
+                {'detail': '角色分配冲突，请重试'},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        return Response({
+            'user_id': parsed_user_id,
+            'role_id': role_id,
+            'message': '角色已更新' if role_id is not None else '角色已清空',
+        }, status=status.HTTP_200_OK)
+
     @action(detail=False, methods=['get'], url_path='role/(?P<role_id>[^/.]+)')
     def get_role_users(self, request, role_id=None):
         """
@@ -296,6 +369,26 @@ class SysUserRoleViewSet(viewsets.ModelViewSet):
         if SysUserRole.objects.filter(user_id=user_id, role_id=role_id).exists():
             return Response(
                 {'detail': '该用户已拥有此角色'},
+                status=status.HTTP_409_CONFLICT
+            )
+
+        # 单选策略：已有其他角色时不允许叠加，由前端确认后改调 set_role 替换
+        current = (
+            SysUserRole.objects.filter(user_id=user_id)
+            .exclude(role_id=role_id)
+            .order_by('role_id')
+            .first()
+        )
+        if current is not None:
+            return Response(
+                {
+                    'detail': (
+                        f'该用户已拥有角色「{_role_name(current.role_id)}」，'
+                        '是否将其角色变更为本角色？'
+                    ),
+                    'has_role': True,
+                    'current_role_id': current.role_id,
+                },
                 status=status.HTTP_409_CONFLICT
             )
 

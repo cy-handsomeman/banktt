@@ -269,9 +269,33 @@ function addMember() {
         $('#userSelect').val('');
         loadMembers(selectedRoleId);
     }).catch(function(err) {
+        const resp = err && err.responseJSON;
+        // 单选策略：用户已有其他角色时，确认后改为替换角色
+        if (err && err.status === 409 && resp && resp.has_role) {
+            if (confirm(resp.detail)) {
+                return changeMemberRole(userId);
+            }
+            return;
+        }
         showToast(parseApiError(err, '添加成员失败'), 2400);
     }).always(function() {
         $('#addMemberBtn').prop('disabled', false);
+    });
+}
+
+// 把用户角色原子替换为当前选中角色
+function changeMemberRole(userId) {
+    return $.ajax({
+        url: `${USER_ROLE_API}user/${userId}/set_role/`,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ role_id: selectedRoleId })
+    }).then(function() {
+        showToast('成员角色已变更', 1500);
+        $('#userSelect').val('');
+        loadMembers(selectedRoleId);
+    }).catch(function(err) {
+        showToast(parseApiError(err, '变更成员角色失败'), 2400);
     });
 }
 
