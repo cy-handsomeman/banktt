@@ -165,6 +165,25 @@ function addItem(payload) {
         fetchList();
         showToast("新增成功", 1500);
     }).catch(err => {
+        const resp = err && err.responseJSON;
+        // 单选策略：用户已有其他角色时，确认后改为替换角色
+        if (err && err.status === 409 && resp && resp.has_role) {
+            if (confirm(resp.detail)) {
+                return $.ajax({
+                    url: `${API_BASE_URL}user/${payload.user_id}/set_role/`,
+                    method: 'POST',
+                    contentType: 'application/json',
+                    data: JSON.stringify({ role_id: payload.role_id })
+                }).then(() => {
+                    fetchList();
+                    showToast("角色已变更", 1500);
+                }).catch(changeErr => {
+                    showToast(parseApiError(changeErr, '变更角色失败'), 2500);
+                    return Promise.reject(changeErr);
+                });
+            }
+            return Promise.reject(err);
+        }
         console.error("新增用户角色关联失败:", err);
         showToast(parseApiError(err, '新增用户角色关联失败，请检查用户ID和角色ID'), 2500);
         return Promise.reject(err);
